@@ -22,35 +22,35 @@ const AppShell: React.FC = () => {
   const handleBackToLanding = () => {
     setSelectedApp(null);
   };
-  // return (
-  //   <div className="grid md:grid-cols-[220px_minmax(0,1fr)] grid-cols-1 h-screen overflow-hidden">
-  //     <SideNav />
-  //     <main className="flex flex-col min-w-0 h-screen overflow-hidden bg-[var(--bg)]">
-  //       <TopNav />
-  //       <section className="flex-1 overflow-auto p-5">
-  //         <Routes>
-  //           <Route path="/" element={<Dashboard />} />
-  //           <Route path="/reports" element={<Reports />} />
-  //           <Route path="/settings" element={<Settings />} />
-  //           <Route path="/integrations" element={<Integrations />} />
-  //           <Route path="*" element={<div className="card">Not Found</div>} />
-  //         </Routes>
-  //       </section>
-  //     </main>
-  //   </div>
-  // )
   return (
-    <div className="app-container">
-      {!selectedApp ? (
-        <Landing onSelectIntegration={handleSelectIntegration} />
-      ) : (
-        <Detail
-          integration={selectedApp}
-          onBack={handleBackToLanding}
-        />
-      )}
+    <div className="grid md:grid-cols-[220px_minmax(0,1fr)] grid-cols-1 h-screen overflow-hidden">
+      <SideNav />
+      <main className="flex flex-col min-w-0 h-screen overflow-hidden bg-[var(--bg)]">
+        <TopNav />
+        <section className="flex-1 overflow-auto p-5">
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/reports" element={<Reports />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/integrations" element={<Integrations />} />
+            <Route path="*" element={<div className="card">Not Found</div>} />
+          </Routes>
+        </section>
+      </main>
     </div>
-  );
+  )
+  // return (
+  //   <div className="app-container">
+  //     {!selectedApp ? (
+  //       <Landing onSelectIntegration={handleSelectIntegration} />
+  //     ) : (
+  //       <Detail
+  //         integration={selectedApp}
+  //         onBack={handleBackToLanding}
+  //       />
+  //     )}
+  //   </div>
+  // );
 };
 //   return (
 //     <div className="grid md:grid-cols-[220px_minmax(0,1fr)] grid-cols-1 h-screen overflow-hidden">
