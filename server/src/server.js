@@ -261,7 +261,33 @@ const genesisAuth = async (req, res, next) => {
       where: { genesisId: customerId }
     });
 
-    if (!customer || customer.genesisAuthToken !== authToken) {
+    if(!customer){
+      //Create a new customer if it doesn't exist
+      const newCustomer = await prisma.customer.create({
+        data: {
+          genesisId: customerId,
+          genesisAuthToken: authToken,
+        },
+      });
+
+      await prisma.customerIntegration.createMany({
+        data: [
+          { customerId: newCustomer.id, integrationId: 'algolia', isEnabled: false, isConfigured: false },
+          { customerId: newCustomer.id, integrationId: 'amazon-s3', isEnabled: false, isConfigured: false },
+          { customerId: newCustomer.id, integrationId: 'bigquery', isEnabled: false, isConfigured: false },
+          { customerId: newCustomer.id, integrationId: 'calendly', isEnabled: false, isConfigured: false },
+          { customerId: newCustomer.id, integrationId: 'confluence', isEnabled: false, isConfigured: false },
+          { customerId: newCustomer.id, integrationId: 'netsuite', isEnabled: true, isConfigured: false },
+          { customerId: newCustomer.id, integrationId: 'oracle', isEnabled: true, isConfigured: false },
+          { customerId: newCustomer.id, integrationId: 'sap_s4hana', isEnabled: true, isConfigured: false },
+          { customerId: newCustomer.id, integrationId: 'slack_integration', isEnabled: true, isConfigured: false }
+        ]
+      });
+      req.customer = newCustomer;
+      return next();
+    }
+
+    if (customer.genesisAuthToken !== authToken) {
       return res.status(403).json({ error: 'Invalid Genesis Authentication' });
     }
 

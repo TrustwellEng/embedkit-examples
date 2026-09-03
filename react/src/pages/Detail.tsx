@@ -66,7 +66,6 @@ const DefaultDetails = ({ formData, handleChange }: { formData: OracleConfigure;
         name="apiUrl"
         value={formData.apiUrl || ""}
         onChange={handleChange}
-        placeholder="https://api.boomi.com/partner/api/rest/v1"
         className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
         required
       />
@@ -78,7 +77,6 @@ const DefaultDetails = ({ formData, handleChange }: { formData: OracleConfigure;
         name="apiAccountId"
         value={formData.apiAccountId || ""}
         onChange={handleChange}
-        placeholder="esharesearchllcdbatrustwe-XXXXXX"
         className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
         required
       />
@@ -90,7 +88,6 @@ const DefaultDetails = ({ formData, handleChange }: { formData: OracleConfigure;
         name="apiUsername"
         value={formData.apiUsername|| ""}
         onChange={handleChange}
-        placeholder="BOOMI_TOKEN.user@trustwell.com"
         className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
         required
       />
@@ -102,7 +99,6 @@ const DefaultDetails = ({ formData, handleChange }: { formData: OracleConfigure;
         name="apiToken"
         value={formData.apiToken || ""}
         onChange={handleChange}
-        placeholder="••••••••••••••••••••••••••••"
         className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] font-mono leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
         required
       />
@@ -118,7 +114,6 @@ const SapDetails = ({ formData, handleChange }: { formData: SapConfigure; handle
         name="odataUrl"
         value={formData.odataUrl || ""}
         onChange={handleChange}
-        placeholder="https://myxxxxxx.s4hana.ondemand.com/sap/opu/odata/sap/..."
         className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
         required
       />
@@ -130,7 +125,6 @@ const SapDetails = ({ formData, handleChange }: { formData: SapConfigure; handle
         name="userName"
         value={formData.userName || ""}
         onChange={handleChange}
-        placeholder="SAP_USER_API"
         className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
         required
       />
@@ -142,7 +136,6 @@ const SapDetails = ({ formData, handleChange }: { formData: SapConfigure; handle
         name="password"
         value={formData.password || ""}
         onChange={handleChange}
-        placeholder="••••••••••••••••••••••••••••"
         className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] font-mono leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
         required
       />
@@ -167,7 +160,7 @@ const NetsuiteDetails = ({ formData, handleChange }: { formData: NetsuiteConfigu
       <input
         type="text"
         name="url"
-        value={formData.url || "https://webservices.netsuite.com/services/NetSuitePort_2025_2"}
+        value={formData.url || ""}
         onChange={handleChange}
         className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
       />
@@ -191,7 +184,6 @@ const NetsuiteDetails = ({ formData, handleChange }: { formData: NetsuiteConfigu
         name="password"
         value={formData.password || ""}
         onChange={handleChange}
-        placeholder="••••••••••••"
         className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] font-mono leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
       />
     </div>
