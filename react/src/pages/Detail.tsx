@@ -339,21 +339,21 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
 
   const queryParams = new URLSearchParams(window.location.search);
   const genesisId = queryParams.get("genesisId");
-  const token = queryParams.get("token");
+  const apiToken = queryParams.get("api_token");
 
   useEffect(() => {
     const fetchConfigFromDB = async () => {
-      if (!genesisId || !token) return;
+      if (!genesisId || !apiToken) return;
       setIsLoading(true);
 
       try {
         const response = await fetch(
-          `${base}/api/credentials/${integration.id}?genesisId=${genesisId}&token=${token}`,
+          `${base}/api/credentials/${integration.id}?genesisId=${genesisId}&api_token=${apiToken}`,
           {
             method: "GET",
             headers: {
               "x-genesis-customer-id": genesisId,
-              "x-genesis-auth-token": token,
+              "x-genesis-auth-token": apiToken,
             },
           }
         );
@@ -418,7 +418,7 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
     };
 
     fetchConfigFromDB();
-  }, [integration.id, isSlack, genesisId, token]);
+  }, [integration.id, isSlack, genesisId, apiToken]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const target = e.target as any;
@@ -440,13 +440,13 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
 
     try {
       const response = await fetch(
-        `${base}/api/credentials/${integration.id}?genesisId=${genesisId}&token=${token}`,
+        `${base}/api/credentials/${integration.id}?genesisId=${genesisId}&api_token=${apiToken}`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "x-genesis-customer-id": genesisId || "",
-            "x-genesis-auth-token": token || "",
+            "x-genesis-auth-token": apiToken || "",
           },
           body: JSON.stringify(formData),
         }

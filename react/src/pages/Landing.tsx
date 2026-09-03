@@ -12,16 +12,14 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
 
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [inputGenesisId, setInputGenesisId] = useState<string>("");
-  const [inputToken, setInputToken] = useState<string>("");
   const [inputApiToken, setInputApiToken] = useState<string>("");
 
   useEffect(() => {
     const queryParams = new URLSearchParams(window.location.search);
     const customerId = queryParams.get("genesisId");
-    const authToken = queryParams.get("token");
     const apiToken = queryParams.get("api_token");
 
-    if (!customerId || !authToken || !apiToken) {
+    if (!customerId || !apiToken) {
       setShowAuthModal(true);
       setLoading(false);
       return;
@@ -74,12 +72,12 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
         const response = await fetch(
           `${base}/api/integrations?genesisId=${encodeURIComponent(
             customerId
-          )}&token=${encodeURIComponent(authToken)}`,
+          )}&api_token==${encodeURIComponent(apiToken)}`,
           {
             method: "GET",
             headers: {
               "x-genesis-customer-id": customerId,
-              "x-genesis-auth-token": authToken,
+              "x-genesis-auth-token": apiToken,
             },
           }
         );
@@ -101,11 +99,10 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
 
   const handleAuthSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputGenesisId.trim() || !inputToken.trim() || !inputApiToken.trim()) return;
+    if (!inputGenesisId.trim() || !inputApiToken.trim()) return;
     
     const newParams = new URLSearchParams(window.location.search);
     newParams.set("genesisId", inputGenesisId.trim());
-    newParams.set("token", inputToken.trim());
     newParams.set("api_token", inputApiToken.trim());
 
     window.location.search = newParams.toString();
@@ -132,17 +129,6 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
                   required
                 />
               </div>
-
-              <div className="flex flex-col">
-                <label className="block text-[14px] font-semibold text-black mb-1">AUTH TOKEN</label>
-                <input
-                  type="password"
-                  value={inputToken}
-                  onChange={(e) => setInputToken(e.target.value)}
-                  className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] font-mono leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
-                  required
-                />
-              </div>
               <div className="flex flex-col">
                 <label className="block text-[14px] font-semibold text-black mb-1">API TOKEN</label>
                 <input
@@ -153,7 +139,6 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
                   required
                 />
               </div>
-
               <div className="pt-6 flex items-center justify-end space-x-4 border-t border-gray-200 mt-2">
                 <button
                   type="submit"
