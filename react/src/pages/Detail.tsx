@@ -5,6 +5,10 @@ interface DetailProps {
   integration: Integration;
   onBack: () => void;
 }
+
+const STORAGE_KEY_GENESIS_ID = "genesis_customer_id";
+const STORAGE_KEY_API_TOKEN = "genesis_api_token";
+
 const base = import.meta.env.VITE_SERVER_URL as string;
 const SlackDetails = ({ formData, handleChange }: { formData: SlackConfigure; handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) => (
   <>
@@ -337,9 +341,8 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
   const isSap = integration.id === "sap_s4hana";
   const isNetsuite = integration.id === "netsuite";
 
-  const queryParams = new URLSearchParams(window.location.search);
-  const genesisId = queryParams.get("genesisId");
-  const apiToken = queryParams.get("api_token");
+  const genesisId = localStorage.getItem(STORAGE_KEY_GENESIS_ID);
+  const apiToken = localStorage.getItem(STORAGE_KEY_API_TOKEN);
 
   useEffect(() => {
     const fetchConfigFromDB = async () => {
@@ -348,7 +351,7 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
 
       try {
         const response = await fetch(
-          `${base}/api/credentials/${integration.id}?genesisId=${genesisId}&api_token=${apiToken}`,
+          `${base}/api/credentials/${integration.id}?genesisId=${genesisId}`,
           {
             method: "GET",
             headers: {
@@ -358,7 +361,7 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
           }
         );
 
-            console.log("Response:", response);
+        console.log("Response:", response);
 
         if (response.ok) {
           const data = await response.json();
@@ -418,7 +421,7 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
     };
 
     fetchConfigFromDB();
-  }, [integration.id, isSlack, genesisId, apiToken]);
+  }, [integration.id, isSlack, isSap, isNetsuite, genesisId, apiToken]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const target = e.target as any;
@@ -436,17 +439,18 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!genesisId || !apiToken) return;
     setSaveStatus("saving...");
 
     try {
       const response = await fetch(
-        `${base}/api/credentials/${integration.id}?genesisId=${genesisId}&api_token=${apiToken}`,
+        `${base}/api/credentials/${integration.id}?genesisId=${genesisId}`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "x-genesis-customer-id": genesisId || "",
-            "x-genesis-auth-token": apiToken || "",
+            "x-genesis-customer-id": genesisId,
+            "x-genesis-auth-token": apiToken,
           },
           body: JSON.stringify(formData),
         }

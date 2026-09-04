@@ -5,6 +5,9 @@ interface LandingProps {
   onSelectIntegration: (integration: Integration) => void;
 }
 
+const STORAGE_KEY_GENESIS_ID = "genesis_customer_id";
+const STORAGE_KEY_API_TOKEN = "genesis_api_token";
+
 export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -16,18 +19,19 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
 
   useEffect(() => {
     const queryParams = new URLSearchParams(window.location.search);
-    const customerId = queryParams.get("genesisId");
-    const apiToken = queryParams.get("api_token");
+    const customerIdUrl = queryParams.get("genesisId");
+    const customerId = localStorage.getItem(STORAGE_KEY_GENESIS_ID);
+    const apiToken = localStorage.getItem(STORAGE_KEY_API_TOKEN);
 
-    if (!customerId || !apiToken) {
+    if (!customerId || !apiToken || (customerIdUrl && customerIdUrl !== customerId)) {
       setShowAuthModal(true);
       setLoading(false);
       return;
     }
-    
+
     const base = import.meta.env.VITE_SERVER_URL as string;
-    
-   const validateAndFetch = async () => {
+
+    const validateAndFetch = async () => {
       try {
         const graphqlQuery = {
           query: `
@@ -68,11 +72,11 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
         if (!validateResponse.ok) {
           throw new Error("Validation failed: Invalid API Token.");
         }
-        
+
         const response = await fetch(
           `${base}/api/integrations?genesisId=${encodeURIComponent(
             customerId
-          )}&api_token==${encodeURIComponent(apiToken)}`,
+          )}`,
           {
             method: "GET",
             headers: {
@@ -100,12 +104,20 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
   const handleAuthSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputGenesisId.trim() || !inputApiToken.trim()) return;
-    
+
+    localStorage.setItem(STORAGE_KEY_GENESIS_ID, inputGenesisId.trim());
+    localStorage.setItem(STORAGE_KEY_API_TOKEN, inputApiToken.trim());
     const newParams = new URLSearchParams(window.location.search);
     newParams.set("genesisId", inputGenesisId.trim());
-    newParams.set("api_token", inputApiToken.trim());
 
     window.location.search = newParams.toString();
+  };
+
+  const handleClearAuth = () => {
+    localStorage.removeItem(STORAGE_KEY_GENESIS_ID);
+    localStorage.removeItem(STORAGE_KEY_API_TOKEN);
+    window.location.search = "";
+    window.location.reload();
   };
 
   if (showAuthModal) {
@@ -167,9 +179,7 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
       <div className="min-h-screen bg-white py-8 px-8 flex flex-col items-center justify-center">
         <p className="text-red-500 font-medium mb-4">Error: {error}</p>
         <button
-          onClick={() => {
-            window.location.search = "";
-          }}
+          onClick={handleClearAuth}
           className="px-4 py-2 bg-gray-800 text-white text-sm rounded-lg"
         >
           Re-enter information
@@ -181,7 +191,16 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
   return (
     <div className="min-h-screen bg-white py-8 px-8">
       <div className="max-w-[1200px] mx-auto">
-        <h1 className="text-xl font-bold text-black mb-6">Integrations</h1>
+         <h1 className="text-xl font-bold text-black mb-6">Integrations</h1>
+        {/* <div className="flex justify-between items-center mb-6">
+          <h1 className="text-xl font-bold text-black">Integrations</h1>
+          <button
+            onClick={handleClearAuth}
+            className="text-xs text-gray-500 hover:text-red-600 underline"
+          >
+            Clear Auth / Logout
+          </button>
+        </div> */}
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           
           {integrations.map((item) => (

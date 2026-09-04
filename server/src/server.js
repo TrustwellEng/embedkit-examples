@@ -249,8 +249,8 @@ app.post('/api/session/nonce', requireAuth, async (req, res) => {
 
 /* For generics */
 const genesisAuth = async (req, res, next) => {
-  const customerId = req.headers['x-genesis-customer-id'] || req.query.genesisId;
-  const authToken = req.headers['x-genesis-auth-token'] || req.query.token;
+  const customerId = req.headers['x-genesis-customer-id'];
+  const authToken = req.headers['x-genesis-auth-token'];
     
   if (!customerId || !authToken) {
     return res.status(401).json({ error: 'Missing Genesis Credentials' });
@@ -260,7 +260,6 @@ const genesisAuth = async (req, res, next) => {
     const customer = await prisma.customer.findUnique({
       where: { genesisId: customerId }
     });
-
     if(!customer){
       //Create a new customer if it doesn't exist
       const newCustomer = await prisma.customer.create({
