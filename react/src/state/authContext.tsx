@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { initBoomi, destroyBoomi, type NoncePayload } from './boomiProvider';
-
-const API_BASE = import.meta.env.VITE_SERVER_URL as string; // your BFF (this express server)
+import { apiFetch, clearSession, exchangeCodeFromUrl } from '../service/session';
 
 type Session = { email: string; isAdmin: boolean } | null;
 
@@ -14,10 +13,9 @@ type AuthCtx = {
 
 const Ctx = createContext<AuthCtx | null>(null);
 
-async function postJSON<T>(url: string, body?: any) {
-  const res = await fetch(url, {
+async function postJSON<T>(path: string, body?: any) {
+  const res = await apiFetch(path, {
     method: 'POST',
-    credentials: 'include',
     headers: { 'content-type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   });
@@ -28,8 +26,8 @@ async function postJSON<T>(url: string, body?: any) {
   return { ok: res.ok, data, text };
 }
 
-async function getJSON<T>(url: string) {
-  const res = await fetch(url, { credentials: 'include' });
+async function getJSON<T>(path: string) {
+  const res = await apiFetch(path);
   const ct = res.headers.get('content-type') || '';
   const text = await res.text();
   let data: any = null;
@@ -47,13 +45,14 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     booted.current = true;
 
     (async () => {
-      const me = await getJSON<{ user: { email: string; isAdmin: boolean } }>(`${API_BASE}/api/session`);
-      if (!me.ok) return;
+      await exchangeCodeFromUrl().catch(() => {});
+      const me = await getJSON<{ user: { email: string; isAdmin: boolean } }>(`/api/session`);
+      if (!me.ok || !me.data?.user) return;
 
       setSession({ email: me.data.user.email, isAdmin: !!me.data.user.isAdmin });
 
       // get a nonce for this existing session and init plugin
-      const r = await postJSON<NoncePayload>(`${API_BASE}/api/session/nonce`);
+      const r = await postJSON<NoncePayload>(`/api/session/nonce`);
       if (r.ok && r.data?.nonce) {
         await initBoomi(r.data as NoncePayload);
       }
@@ -61,7 +60,7 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
   }, []);
 
   async function login(email: string, password: string) {
-    const r = await postJSON<NoncePayload>(`${API_BASE}/api/session`, { email, password });
+    const r = await postJSON<NoncePayload>(`/api/session`, { email, password });
     if (!r.ok) {
       const msg = r.data?.error || r.data?.message || r.text || 'Unable to sign in';
       return { ok: false as const, message: msg };
@@ -72,21 +71,22 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({ children }) =>
     await initBoomi(payload);
 
     // Also fetch /api/session to get who we are (optional, but handy)
-    const me = await getJSON<{ user: { email: string; isAdmin: boolean } }>(`${API_BASE}/api/session`);
-    if (me.ok) setSession({ email: me.data.user.email, isAdmin: !!me.data.user.isAdmin });
+    const me = await getJSON<{ user: { email: string; isAdmin: boolean } }>(`/api/session`);
+    if (me.ok && me.data?.user) setSession({ email: me.data.user.email, isAdmin: !!me.data.user.isAdmin });
 
     return { ok: true as const };
   }
 
   async function logout() {
-    await fetch(`${API_BASE}/api/session`, { method: 'DELETE', credentials: 'include' });
+    await apiFetch(`/api/session`, { method: 'DELETE' });
+    clearSession();
     destroyBoomi();
     setSession(null);
     // optional: location.reload();
   }
 
   async function ensureNonce(): Promise<NoncePayload | null> {
-    const r = await postJSON<NoncePayload>(`${API_BASE}/api/session/nonce`);
+    const r = await postJSON<NoncePayload>(`/api/session/nonce`);
     if (!r.ok) return null;
     return r.data as NoncePayload;
   }

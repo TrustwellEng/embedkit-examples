@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import crypto from 'node:crypto';
 import express from 'express';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -6,9 +7,9 @@ import cookieParser from 'cookie-parser';
 import jwt from 'jsonwebtoken';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 import fetch from 'node-fetch';
-import 'dotenv/config';
-import { PrismaMssql } from "@prisma/adapter-mssql";
+import { PrismaMssql } from '@prisma/adapter-mssql';
 import { PrismaClient } from '@prisma/client';
+
 /* ------------ env ------------ */
 const {
   PORT = 8080,
@@ -16,6 +17,12 @@ const {
   JWT_SECRET,
   CORS_ORIGINS,
   COOKIE_DOMAIN,
+  // Comma-separated origins of the host app (Genesis) allowed to embed this page in an iframe
+  FRAME_ANCESTORS,
+  // Where to redirect after exchanging a code for a session (default "/")
+  FRONTEND_URL = '/',
+  // One-time code TTL (seconds)
+  CODE_TTL_SEC = '60',
   EMBEDKIT_SERVER_BASE,
   API_URL,
   API_ACCOUNT_ID,
@@ -35,25 +42,16 @@ const {
 if (!DB_SERVER || !DB_NAME || !DB_USER || !DB_PASSWORD) {
   throw new Error('Missing DB_SERVER, DB_NAME, DB_USER, or DB_PASSWORD');
 }
+if (!JWT_SECRET) {
+  throw new Error('Missing JWT_SECRET');
+}
 
-let iEmail
-/* ------------ app ------------ */
-const app = express();
-app.set('trust proxy', 1);
-app.disable('x-powered-by');
-app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: { policy: 'same-site' } }));
-app.use(morgan(NODE_ENV === 'production' ? 'combined' : 'tiny'));
-app.use(express.json({ limit: '1mb' }));
-app.use(cookieParser());
+const isProd = NODE_ENV === 'production';
+const splitList = (s) => (s ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+const ALLOW_ORIGINS = new Set(splitList(CORS_ORIGINS));
+const FRAME_ANCESTOR_LIST = splitList(FRAME_ANCESTORS);
 
-/* ------------ CORS (multi-origin, credentialed) ------------ */
-const ALLOW_ORIGINS = new Set(
-  (CORS_ORIGINS ?? '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean)
-);
-
+/* ------------ db ------------ */
 const adapter = new PrismaMssql({
   server: DB_SERVER,
   port: Number(DB_PORT),
@@ -67,6 +65,37 @@ const adapter = new PrismaMssql({
 });
 const prisma = new PrismaClient({ adapter });
 
+try {
+  await prisma.$queryRaw`SELECT 1`;
+  console.log('[db] connected');
+} catch (e) {
+  console.error('[db] connect failed:', e?.message || e);
+}
+
+/* ------------ app ------------ */
+const app = express();
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+
+// Allow the host app (Genesis) to embed this page in an iframe.
+// Note: this header only applies to responses from this server. If the frontend is
+// served elsewhere (nginx, CDN...), frame-ancestors must be set there too.
+app.use(
+  helmet({
+    frameguard: false, // disable X-Frame-Options, use CSP frame-ancestors instead
+    contentSecurityPolicy: false, // set manually below (newer helmet requires default-src)
+    crossOriginResourcePolicy: { policy: 'same-site' },
+  })
+);
+app.use((_req, res, next) => {
+  res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${FRAME_ANCESTOR_LIST.join(' ')}`.trim());
+  next();
+});
+app.use(morgan(isProd ? 'combined' : 'tiny'));
+app.use(express.json({ limit: '1mb' }));
+app.use(cookieParser());
+
+/* ------------ CORS (multi-origin, credentialed) ------------ */
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin && ALLOW_ORIGINS.has(origin)) {
@@ -74,58 +103,164 @@ app.use((req, res, next) => {
     res.header('Vary', 'Origin');
   }
   res.header('Access-Control-Allow-Credentials', 'true');
-res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-genesis-customer-id, x-genesis-auth-token');
+  res.header(
+    'Access-Control-Allow-Headers',
+    isProd
+      ? 'Content-Type, Authorization'
+      : 'Content-Type, Authorization, x-genesis-customer-id, x-genesis-auth-token' // dev: lets the test login form call /api/code
+  );
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
 
 /* ------------ rate limit ------------ */
-const limiter = new RateLimiterMemory({ points: 100, duration: 60 });
-app.use(async (req, res, next) => {
-  try {
-    await limiter.consume(req.ip);
-    return next();
-  } catch {
-    return res.status(429).json({ error: 'rate_limited' });
-  }
-});
+function makeLimiter(points, duration) {
+  const limiter = new RateLimiterMemory({ points, duration });
+  return async (req, res, next) => {
+    try {
+      await limiter.consume(req.ip);
+      next();
+    } catch {
+      res.status(429).json({ error: 'rate_limited' });
+    }
+  };
+}
+app.use(makeLimiter(100, 60));
+const strictLimiter = makeLimiter(20, 60); // for /api/code and /?code=
 
-/* ------------ cookie helpers ------------ */
-function cookieOptions(req) {
-  const origin = req.headers.origin || '';
-  const allow = origin && ALLOW_ORIGINS.has(origin);
-  const isProd = NODE_ENV === 'production';
-
+/* ------------ cookie + session helpers ------------ */
+// Cross-site iframe => production needs SameSite=None; Secure; Partitioned (CHIPS)
+// so it still works when the browser blocks third-party cookies.
+// Dev (localhost) is same-site, so lax is fine.
+// If your Express/cookie version doesn't support `partitioned`, the option is ignored.
+function cookieOptions() {
   return {
     httpOnly: true,
-    secure: allow || isProd,          // required when SameSite=None
-    sameSite: allow ? 'none' : 'lax', // cross-site vs same-site
+    secure: isProd,
+    sameSite: isProd ? 'none' : 'lax',
+    partitioned: isProd,
     path: '/',
     domain: COOKIE_DOMAIN || undefined,
   };
 }
 
-/* ------------ session helpers ------------ */
-function setSession(req, res, claims) {
-  if (!claims || typeof claims !== 'object') {
-    return res.status(500).json({ error: 'internal_no_claims' });
-  }
-  if (!JWT_SECRET) {
-    return res.status(500).json({ error: 'server_misconfigured' });
-  }
-  const token = jwt.sign(claims, JWT_SECRET, { expiresIn: '2h' });
-  res.cookie('sid', token, { ...cookieOptions(req), maxAge: 2 * 60 * 60 * 1000 });
+const SESSION_TTL_SEC = 2 * 60 * 60;
+
+// Returns a session token and also sets the `sid` cookie.
+// - Browsers allowing third-party cookies (Chrome/CHIPS): use the cookie.
+// - Safari / iframes with blocked cookies, Postman: send the token via `Authorization: Bearer <token>`.
+function startSession(res, customer) {
+  const token = jwt.sign({ sub: customer.genesisId }, JWT_SECRET, { expiresIn: SESSION_TTL_SEC });
+  res.cookie('sid', token, { ...cookieOptions(), maxAge: SESSION_TTL_SEC * 1000 });
+  return token;
 }
 
-function requireAuth(req, res, next) {
-  const c = req.cookies?.sid;
-  if (!c) return res.status(401).json({ error: 'unauthorized' });
+function readSessionToken(req) {
+  const auth = req.headers.authorization;
+  if (typeof auth === 'string' && auth.startsWith('Bearer ')) return auth.slice(7).trim();
+  return req.cookies?.sid;
+}
+
+// Session obtained from a code -> load the customer from the DB on every request
+async function requireSession(req, res, next) {
+  const token = readSessionToken(req);
+  if (!token) return res.status(401).json({ error: 'unauthorized' });
+
+  let claims;
   try {
-    req.user = jwt.verify(c, JWT_SECRET);
-    next();
+    claims = jwt.verify(token, JWT_SECRET);
   } catch {
-    res.status(401).json({ error: 'unauthorized' });
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+
+  try {
+    const customer = await prisma.customer.findUnique({ where: { genesisId: String(claims.sub) } });
+    if (!customer) return res.status(401).json({ error: 'unauthorized' });
+    req.customer = customer;
+    next();
+  } catch (error) {
+    console.error('requireSession error:', error);
+    res.status(500).json({ error: 'Database error' });
+  }
+}
+
+/* ------------ one-time code store ------------ */
+// In-memory: only correct with a single instance. When scaling out, move to
+// Redis (SET code EX 60 NX + GETDEL) or a DB table with an expiresAt column.
+const CODE_TTL_MS = Number(CODE_TTL_SEC) * 1000;
+const codeStore = new Map(); // code -> { genesisId, expiresAt }
+
+function issueCode(genesisId) {
+  const code = crypto.randomBytes(32).toString('base64url');
+  codeStore.set(code, { genesisId, expiresAt: Date.now() + CODE_TTL_MS });
+  return code;
+}
+
+// Single use: delete on read, even if already expired
+function consumeCode(code) {
+  const entry = codeStore.get(code);
+  if (!entry) return null;
+  codeStore.delete(code);
+  return entry.expiresAt >= Date.now() ? entry : null;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [code, entry] of codeStore) {
+    if (entry.expiresAt < now) codeStore.delete(code);
+  }
+}, 30_000).unref();
+
+function safeEqual(a, b) {
+  const ba = Buffer.from(String(a));
+  const bb = Buffer.from(String(b));
+  return ba.length === bb.length && crypto.timingSafeEqual(ba, bb);
+}
+
+/* ------------ Genesis token validation (only used by POST /api/code) ------------ */
+const DEFAULT_INTEGRATIONS = [
+  { integrationId: 'algolia', isEnabled: false },
+  { integrationId: 'amazon-s3', isEnabled: false },
+  { integrationId: 'bigquery', isEnabled: false },
+  { integrationId: 'calendly', isEnabled: false },
+  { integrationId: 'confluence', isEnabled: false },
+  { integrationId: 'netsuite', isEnabled: true },
+  { integrationId: 'oracle', isEnabled: true },
+  { integrationId: 'sap_s4hana', isEnabled: true },
+  { integrationId: 'slack_integration', isEnabled: true },
+];
+
+async function genesisAuth(req, res, next) {
+  const customerId = req.headers['x-genesis-customer-id'];
+  const authToken = req.headers['x-genesis-auth-token'];
+
+  if (!customerId || !authToken) {
+    return res.status(401).json({ error: 'Missing Genesis Credentials' });
+  }
+
+  try {
+    const genesisId = String(customerId);
+    let customer = await prisma.customer.findUnique({ where: { genesisId } });
+
+    if (!customer) {
+      // WARNING: creates a customer for any token (trust on first use).
+      // Should validate the token with Genesis before creating, and store a hash instead of plain text.
+      customer = await prisma.customer.create({
+        data: { genesisId, genesisAuthToken: String(authToken) },
+      });
+      await prisma.customerIntegration.createMany({
+        data: DEFAULT_INTEGRATIONS.map((i) => ({ customerId: customer.id, isConfigured: false, ...i })),
+      });
+    } else if (!safeEqual(customer.genesisAuthToken, authToken)) {
+      return res.status(403).json({ error: 'Invalid Genesis Authentication' });
+    }
+
+    req.customer = customer;
+    next();
+  } catch (error) {
+    console.error('genesisAuth error:', error);
+    res.status(500).json({ error: 'Database error' });
   }
 }
 
@@ -134,27 +269,74 @@ function requireAuth(req, res, next) {
 // Health
 app.get('/api/ping', (_req, res) => res.json({ ok: true }));
 
-// get a valid session token back
-app.post('/api/session', async (req, res) => {
-  console.log('[login] Login attempt');
-  const { email, password } = req.body || {};
-  if (!email || !password) {
-    return res.status(400).json({ error: 'email_and_password_required' });
+// (1) Server-to-server: host backend sends the real token, receives a single-use code (~60s)
+app.post('/api/code', strictLimiter, genesisAuth, (req, res) => {
+  const code = issueCode(req.customer.genesisId);
+  res.set('Cache-Control', 'no-store');
+  res.json({ code, ttlSec: Number(CODE_TTL_SEC) });
+});
+
+// Exchange code -> customer (shared by GET /?code= and POST /api/session/exchange)
+async function exchangeCode(code) {
+  if (typeof code !== 'string' || !code) return null;
+  const entry = consumeCode(code);
+  if (!entry) return null;
+  return prisma.customer.findUnique({ where: { genesisId: entry.genesisId } });
+}
+
+// (2a) Iframe/web pointing directly at the API: GET /?code=... -> delete code, set cookie, redirect to FRONTEND_URL
+app.get('/', strictLimiter, async (req, res, next) => {
+  const { code } = req.query;
+  if (typeof code !== 'string' || !code) return next(); // no code: let the frontend/other routes handle it
+
+  res.set('Cache-Control', 'no-store');
+  try {
+    const customer = await exchangeCode(code);
+    if (!customer) return res.status(401).send('Invalid or expired code');
+
+    startSession(res, customer);
+    // Redirect so the code drops out of the URL
+    return res.redirect(302, FRONTEND_URL);
+  } catch (error) {
+    console.error('code exchange error:', error);
+    return res.status(500).send('Server error');
   }
-  iEmail = String(email).toLowerCase();
-  console.log(`[login] Authenticating user: ${email}`);
+});
 
-  // 1) Authenticate against DB (demo: plain compare; hash in prod)
-  console.log(`[login] User logged in: ${email}`);
+// (2b) Frontend (iframe or regular tab) / Postman: POST { code } -> session token (+ cookie)
+// The frontend is served from another host (nginx), so it reads ?code= and calls this endpoint.
+app.post('/api/session/exchange', strictLimiter, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const customer = await exchangeCode(req.body?.code ?? req.query.code);
+    if (!customer) return res.status(401).json({ error: 'invalid_or_expired_code' });
 
-  // 2) Set app session cookie (host app session)
-  setSession(req, res, {
-    sub: String(email.toLowerCase()),
-    email: email.toLowerCase(),
-    isAdmin: false,
-  });
+    const token = startSession(res, customer);
+    return res.json({
+      token,
+      tokenType: 'Bearer',
+      expiresIn: SESSION_TTL_SEC,
+      customer: { genesisId: customer.genesisId },
+    });
+  } catch (error) {
+    console.error('code exchange error:', error);
+    return res.status(500).json({ error: 'server_error' });
+  }
+});
 
-  // Build the Boomi credential payload for BFF (server-to-server only)
+// Current session
+app.get('/api/session', requireSession, (req, res) => {
+  res.json({ ok: true, customer: { genesisId: req.customer.genesisId } });
+});
+
+// Logout
+app.delete('/api/session', (_req, res) => {
+  res.clearCookie('sid', cookieOptions());
+  res.json({ ok: true });
+});
+
+// Get an EmbedKit nonce for the current session (server-to-server, secrets never reach the browser)
+app.post('/api/session/nonce', requireSession, async (req, res) => {
   const boomiPayload = {
     url: API_URL,
     parentAccountId: API_ACCOUNT_ID,
@@ -164,226 +346,91 @@ app.post('/api/session', async (req, res) => {
     accountGroup: API_ACCOUNT_GROUP || undefined,
   };
 
-  // 4) Call EmbedKit Server /auth/login to get a NONCE (bind nonce to the browser's Origin)
   try {
-    const origin = req.headers.origin || '';
-    console.log('Request Session Origin:', origin, API_ACCOUNT_ID);
     const r = await fetch(`${EMBEDKIT_SERVER_BASE}/auth/admin/login`, {
       method: 'POST',
-      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        'Origin': origin,
+        Origin: req.headers.origin || '',
         'X-Tenant-Id': API_ACCOUNT_ID || '',
       },
       body: JSON.stringify(boomiPayload),
     });
-
     if (!r.ok) {
       const errText = await r.text().catch(() => '');
       console.error('EmbedKit Server login failed:', r.status, errText);
-      return res.status(r.status).json({ error: 'Login Failed', detail: errText });
+      return res.status(r.status).json({ error: 'embedkit_server_login_failed', detail: errText });
     }
-
     const { nonce, ttlSec } = await r.json();
-    // 5) Return only the Nonce to the UI
-    return res.json({ nonce, ttlSec, serverBase: EMBEDKIT_SERVER_BASE, tenantId: API_ACCOUNT_ID });
+    return res.json({ serverBase: EMBEDKIT_SERVER_BASE, nonce, ttlSec, tenantId: API_ACCOUNT_ID });
   } catch (e) {
     console.error('Error connecting to EmbedKit Server:', e);
     return res.status(502).json({ error: 'embedkit_server_unreachable' });
   }
 });
 
-
-// does the user have a session
-app.get('/api/session', requireAuth, async (req, res) => {
-
-  const summary = {
-    id: String(iEmail),
-    email: iEmail,
-    isAdmin: false,
-  };
-
-  return res.json({ ok: true, user: summary });
-});
-
-// Logout (host app)
-app.delete('/api/session', (req, res) => {
-  res.clearCookie('sid', cookieOptions(req));
-  res.json({ ok: true });
-});
-
-/* for existing auth users */
-app.post('/api/session/nonce', requireAuth, async (req, res) => {
-  const boomiPayload = {
-    url: API_URL,
-    parentAccountId: API_ACCOUNT_ID,
-    apiUserName: API_USERNAME,
-    apiToken: API_TOKEN,
-    childAccountId: API_AUTH_USER || undefined,
-    accountGroup: API_ACCOUNT_GROUP || undefined,
-  };
-
+/* ------------ integrations (session-authenticated, no Genesis headers/query) ------------ */
+app.get('/api/integrations', requireSession, async (req, res) => {
   try {
-    const origin = req.headers.origin || '';
-    console.log('Request Nonce Origin:', origin);
-    const r = await fetch(`${EMBEDKIT_SERVER_BASE}/auth/admin/login`, {
-      method: 'POST',
-      credentials: 'include', 
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Tenant-Id': API_ACCOUNT_ID || '',
-      },
-      body: JSON.stringify(boomiPayload),
+    const availableApps = await prisma.customerIntegration.findMany({
+      where: { customerId: req.customer.id, isEnabled: true },
+      include: { integration: true },
     });
-    if (!r.ok) {
-      const errText = await r.text().catch(() => '');
-      return res.status(r.status).json({ error: 'embedkit_server_login_failed', detail: errText });
-    }
-    const { nonce, ttlSec } = await r.json();
-    return res.json({ serverBase: EMBEDKIT_SERVER_BASE, nonce, ttlSec, tenantId: API_ACCOUNT_ID  });
-  } catch {
-    return res.status(502).json({ error: 'embedkit_server_unreachable' });
-  }
-});
 
-/* For generics */
-const genesisAuth = async (req, res, next) => {
-  const customerId = req.headers['x-genesis-customer-id'];
-  const authToken = req.headers['x-genesis-auth-token'];
-    
-  if (!customerId || !authToken) {
-    return res.status(401).json({ error: 'Missing Genesis Credentials' });
-  }
-
-  try {
-    const customer = await prisma.customer.findUnique({
-      where: { genesisId: customerId }
-    });
-    if(!customer){
-      //Create a new customer if it doesn't exist
-      const newCustomer = await prisma.customer.create({
-        data: {
-          genesisId: customerId,
-          genesisAuthToken: authToken,
-        },
-      });
-
-      await prisma.customerIntegration.createMany({
-        data: [
-          { customerId: newCustomer.id, integrationId: 'algolia', isEnabled: false, isConfigured: false },
-          { customerId: newCustomer.id, integrationId: 'amazon-s3', isEnabled: false, isConfigured: false },
-          { customerId: newCustomer.id, integrationId: 'bigquery', isEnabled: false, isConfigured: false },
-          { customerId: newCustomer.id, integrationId: 'calendly', isEnabled: false, isConfigured: false },
-          { customerId: newCustomer.id, integrationId: 'confluence', isEnabled: false, isConfigured: false },
-          { customerId: newCustomer.id, integrationId: 'netsuite', isEnabled: true, isConfigured: false },
-          { customerId: newCustomer.id, integrationId: 'oracle', isEnabled: true, isConfigured: false },
-          { customerId: newCustomer.id, integrationId: 'sap_s4hana', isEnabled: true, isConfigured: false },
-          { customerId: newCustomer.id, integrationId: 'slack_integration', isEnabled: true, isConfigured: false }
-        ]
-      });
-      req.customer = newCustomer;
-      return next();
-    }
-
-    if (customer.genesisAuthToken !== authToken) {
-      return res.status(403).json({ error: 'Invalid Genesis Authentication' });
-    }
-
-    req.customer = customer;
-    next();
+    res.json(
+      availableApps.map((item) => ({
+        id: item.integration.id,
+        name: item.integration.name,
+        category: item.integration.category,
+        iconUrl: item.integration.iconUrl,
+        badge: item.integration.badge,
+        isConfigured: item.isConfigured,
+      }))
+    );
   } catch (error) {
-    res.status(500).json({ error: 'Database error' });
-  }
-};
-
-app.get('/api/integrations', genesisAuth, async (req, res) => {
-  try {
-    // Only get the apps enabled for this customer
-      const availableApps = await prisma.customerIntegration.findMany({
-      where: { 
-        customerId: req.customer.id,
-        isEnabled: true 
-      },
-      include: {
-        integration: true // Always include name, icon, category from Catalog table
-      }
-    });
-
-    // Format the data returned for Frontend Landing.tsx
-    const formattedData = availableApps.map(item => ({
-      id: item.integration.id,
-      name: item.integration.name,
-      category: item.integration.category,
-      iconUrl: item.integration.iconUrl,
-      badge: item.integration.badge,
-      isConfigured: item.isConfigured
-    }));
-
-    res.json(formattedData);
-  } catch (error) {
+    console.error('Failed to load integrations:', error);
     res.status(500).json({ error: 'Failed to load integrations' });
   }
 });
 
-app.post('/api/credentials/:integrationId', genesisAuth, async (req, res) => {
+app.post('/api/credentials/:integrationId', requireSession, async (req, res) => {
   const { integrationId } = req.params;
-  const payload = req.body; 
   try {
-    const stringifiedPayload = JSON.stringify(payload);
+    const configPayload = JSON.stringify(req.body);
 
-    let credential = await prisma.connectionCredential.findFirst({
-      where: { customerId: req.customer.id, integrationId: integrationId }
+    const existing = await prisma.connectionCredential.findFirst({
+      where: { customerId: req.customer.id, integrationId },
     });
 
-    if (credential) {
-      await prisma.connectionCredential.update({
-        where: { id: credential.id },
-        data: { configPayload: stringifiedPayload }
-      });
+    if (existing) {
+      await prisma.connectionCredential.update({ where: { id: existing.id }, data: { configPayload } });
     } else {
       await prisma.connectionCredential.create({
-        data: {
-          customerId: req.customer.id,
-          integrationId: integrationId,
-          configPayload: stringifiedPayload
-        }
+        data: { customerId: req.customer.id, integrationId, configPayload },
       });
     }
+
     await prisma.customerIntegration.update({
-      where: {
-        customerId_integrationId: {
-          customerId: req.customer.id,
-          integrationId: integrationId
-        }
-      },
-      data: { isConfigured: true }
+      where: { customerId_integrationId: { customerId: req.customer.id, integrationId } },
+      data: { isConfigured: true },
     });
 
     res.json({ success: true, message: 'Credentials saved successfully' });
   } catch (error) {
-    console.error("Failed to save credentials:", error);
+    console.error('Failed to save credentials:', error);
     res.status(500).json({ error: 'Failed to save credentials' });
   }
 });
 
-app.get('/api/credentials/:integrationId', genesisAuth, async (req, res) => {
+app.get('/api/credentials/:integrationId', requireSession, async (req, res) => {
   const { integrationId } = req.params;
   try {
     const credential = await prisma.connectionCredential.findFirst({
-      where: {
-        customerId: req.customer.id,
-        integrationId: integrationId
-      }
+      where: { customerId: req.customer.id, integrationId },
     });
-
-    if (!credential) {
-      return res.json({ configPayload: null });
-    }
-
-    res.json({ configPayload: credential.configPayload });
+    res.json({ configPayload: credential ? credential.configPayload : null });
   } catch (error) {
-    console.error("Failed to load credentials:", error);
+    console.error('Failed to load credentials:', error);
     res.status(500).json({ error: 'Failed to load credentials' });
   }
 });
@@ -392,4 +439,5 @@ app.get('/api/credentials/:integrationId', genesisAuth, async (req, res) => {
 app.listen(Number(PORT), () => {
   console.log(`API listening on :${PORT}`);
   console.log('Allowed origins:', [...ALLOW_ORIGINS].join(', ') || '(none)');
+  console.log('Frame ancestors:', FRAME_ANCESTOR_LIST.join(', ') || '(self only)');
 });

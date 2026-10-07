@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { apiFetch } from "../service/session";
 import { Integration, IntegrationConfigure, NetsuiteConfigure, OracleConfigure, SapConfigure, SlackConfigure } from "../data/integrations";
 
 interface DetailProps {
@@ -6,10 +7,6 @@ interface DetailProps {
   onBack: () => void;
 }
 
-const STORAGE_KEY_GENESIS_ID = "genesis_customer_id";
-const STORAGE_KEY_API_TOKEN = "genesis_api_token";
-
-const base = import.meta.env.VITE_SERVER_URL as string;
 const SlackDetails = ({ formData, handleChange }: { formData: SlackConfigure; handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) => (
   <>
     <div className="flex flex-col">
@@ -341,27 +338,12 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
   const isSap = integration.id === "sap_s4hana";
   const isNetsuite = integration.id === "netsuite";
 
-  const genesisId = localStorage.getItem(STORAGE_KEY_GENESIS_ID);
-  const apiToken = localStorage.getItem(STORAGE_KEY_API_TOKEN);
-
   useEffect(() => {
     const fetchConfigFromDB = async () => {
-      if (!genesisId || !apiToken) return;
       setIsLoading(true);
 
       try {
-        const response = await fetch(
-          `${base}/api/credentials/${integration.id}?genesisId=${genesisId}`,
-          {
-            method: "GET",
-            headers: {
-              "x-genesis-customer-id": genesisId,
-              "x-genesis-auth-token": apiToken,
-            },
-          }
-        );
-
-        console.log("Response:", response);
+        const response = await apiFetch(`/api/credentials/${integration.id}`);
 
         if (response.ok) {
           const data = await response.json();
@@ -421,7 +403,7 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
     };
 
     fetchConfigFromDB();
-  }, [integration.id, isSlack, isSap, isNetsuite, genesisId, apiToken]);
+  }, [integration.id, isSlack, isSap, isNetsuite]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const target = e.target as any;
@@ -439,22 +421,14 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!genesisId || !apiToken) return;
     setSaveStatus("saving...");
 
     try {
-      const response = await fetch(
-        `${base}/api/credentials/${integration.id}?genesisId=${genesisId}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-genesis-customer-id": genesisId,
-            "x-genesis-auth-token": apiToken,
-          },
-          body: JSON.stringify(formData),
-        }
-      );
+      const response = await apiFetch(`/api/credentials/${integration.id}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
       
       if (!response.ok) {
         throw new Error("Failed to save credentials");
