@@ -108,7 +108,7 @@ body {
   /* Radii */
   --radius-lg: 16px;
   --radius-md: 12px;
-  --radius-sm: 10px);
+  --radius-sm: 10px;
 
   /* Header bridge */
   --header-bg: var(--boomi-header-bg-color, rgba(15, 23, 42, 0.8));
@@ -179,14 +179,17 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
+/* In the base layer so Tailwind utilities (text-*, etc.) can override them */
+@layer base {
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
 
-button {
-  color: inherit;
-  font: inherit;
+  button {
+    color: inherit;
+    font: inherit;
+  }
 }
 
 /* 2) Utilities -------------------------------------------------------------- */
@@ -237,11 +240,14 @@ button {
 .form-group {
   margin-bottom: 14px;
 }
-label {
-  display: block;
-  margin-bottom: 6px;
-  color: var(--boomi-form-label-fg, var(--muted));
-  font-size: 0.9rem;
+/* Base layer so Tailwind utilities on labels (text-*, mb-*, etc.) win */
+@layer base {
+  label {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--boomi-form-label-fg, var(--muted));
+    font-size: 0.9rem;
+  }
 }
 .input {
   width: 100%;

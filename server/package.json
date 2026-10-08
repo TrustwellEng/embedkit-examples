@@ -24,7 +24,8 @@
     "morgan": "^1.10.0",
     "mssql": "^12.7.0",
     "node-fetch": "^3.3.2",
-    "rate-limiter-flexible": "^5.0.5"
+    "rate-limiter-flexible": "^5.0.5",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "@prisma/config": "^7.9.1",

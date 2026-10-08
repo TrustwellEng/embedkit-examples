@@ -126,6 +126,10 @@ NODE_ENV=development
 
 # Auth
 JWT_SECRET=replace_with_a_random_secret
+# Enables /api/admin/catalog (send as `x-admin-key` header); admin routes are off when unset
+ADMIN_API_KEY=replace_with_a_random_secret
+# Swagger UI at /api/docs (spec at /api/docs.json) is on outside production; set true to enable it in production
+# ENABLE_API_DOCS=true
 
 # CORS — must match the origin of the client you are running
 CORS_ORIGINS=http://localhost:5173

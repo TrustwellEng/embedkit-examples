@@ -13,30 +13,34 @@ model Customer {
   customerName     String?  @db.NVarChar(255)
   createdAt        DateTime @default(now())
 
-  integrations     CustomerIntegration[]
-  credentials      ConnectionCredential[]
+  integrations CustomerIntegration[]
+  credentials  ConnectionCredential[]
+  dataSyncs    DataSyncCredential[]
+  schedules    ScheduleCredential[]
 }
 
 model IntegrationsCatalog {
-  id             String  @id @db.VarChar(50) 
+  id             String  @id @db.VarChar(50)
   name           String  @db.NVarChar(100)
   category       String  @db.NVarChar(50)
   iconUrl        String? @db.VarChar(500)
   badge          String? @db.NVarChar(50)
   isGlobalActive Boolean @default(true)
 
-  customers      CustomerIntegration[]
-  credentials    ConnectionCredential[]
+  customers   CustomerIntegration[]
+  credentials ConnectionCredential[]
+  dataSyncs   DataSyncCredential[]
+  schedules   ScheduleCredential[]
 }
 
 model CustomerIntegration {
-  customerId    String @db.UniqueIdentifier
-  integrationId String @db.VarChar(50)
+  customerId    String  @db.UniqueIdentifier
+  integrationId String  @db.VarChar(50)
   isEnabled     Boolean @default(false)
   isConfigured  Boolean @default(false)
 
-  customer      Customer            @relation(fields: [customerId], references: [id])
-  integration   IntegrationsCatalog @relation(fields: [integrationId], references: [id])
+  customer    Customer            @relation(fields: [customerId], references: [id])
+  integration IntegrationsCatalog @relation(fields: [integrationId], references: [id])
 
   @@id([customerId, integrationId]) // Composite Primary Key
 }
@@ -48,6 +52,34 @@ model ConnectionCredential {
   configPayload String   @db.NVarChar(Max)
   updatedAt     DateTime @updatedAt
 
-  customer      Customer            @relation(fields: [customerId], references: [id])
-  integration   IntegrationsCatalog @relation(fields: [integrationId], references: [id])
+  customer    Customer            @relation(fields: [customerId], references: [id])
+  integration IntegrationsCatalog @relation(fields: [integrationId], references: [id])
+}
+
+// Wizard step 3: data sync settings (JSON, same shape as ConnectionCredential)
+model DataSyncCredential {
+  id            String   @id @default(uuid()) @db.UniqueIdentifier
+  customerId    String   @db.UniqueIdentifier
+  integrationId String   @db.VarChar(50)
+  configPayload String   @db.NVarChar(Max)
+  updatedAt     DateTime @updatedAt
+
+  customer    Customer            @relation(fields: [customerId], references: [id])
+  integration IntegrationsCatalog @relation(fields: [integrationId], references: [id])
+
+  @@unique([customerId, integrationId])
+}
+
+// Wizard step 4: schedule settings (JSON, same shape as ConnectionCredential)
+model ScheduleCredential {
+  id            String   @id @default(uuid()) @db.UniqueIdentifier
+  customerId    String   @db.UniqueIdentifier
+  integrationId String   @db.VarChar(50)
+  configPayload String   @db.NVarChar(Max)
+  updatedAt     DateTime @updatedAt
+
+  customer    Customer            @relation(fields: [customerId], references: [id])
+  integration IntegrationsCatalog @relation(fields: [integrationId], references: [id])
+
+  @@unique([customerId, integrationId])
 }

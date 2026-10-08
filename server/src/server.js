@@ -9,6 +9,9 @@ import { RateLimiterMemory } from 'rate-limiter-flexible';
 import fetch from 'node-fetch';
 import { PrismaMssql } from '@prisma/adapter-mssql';
 import { PrismaClient } from '@prisma/client';
+import swaggerUi from 'swagger-ui-express';
+import { createCatalogRouter } from './controllers/catalogController.js';
+import { openapiSpec } from './docs/openapi.js';
 
 /* ------------ env ------------ */
 const {
@@ -25,6 +28,10 @@ const {
   CODE_TTL_SEC = '60',
   // Genesis GraphQL API used to validate x-genesis-auth-token
   GENESIS_API_URL = 'https://api-dev.trustwell.com/genesis',
+  // Shared secret for /api/admin/* (sent as `x-admin-key`). Admin routes are disabled when unset.
+  ADMIN_API_KEY,
+  // Serve Swagger UI at /api/docs in production too (always on outside production)
+  ENABLE_API_DOCS,
   EMBEDKIT_SERVER_BASE,
   API_URL,
   API_ACCOUNT_ID,
@@ -279,6 +286,19 @@ async function validateGenesisToken(authToken) {
   return true;
 }
 
+// Give a customer every catalog integration it doesn't have yet (enabled, not configured).
+// Covers catalog rows inserted directly in the DB and customers created mid catalog insert.
+async function addMissingIntegrations(customerId) {
+  return prisma.$executeRaw`
+    INSERT INTO CustomerIntegration (customerId, integrationId, isEnabled, isConfigured)
+    SELECT ${customerId}, c.id, 1, 0
+    FROM IntegrationsCatalog c
+    WHERE NOT EXISTS (
+      SELECT 1 FROM CustomerIntegration ci
+      WHERE ci.customerId = ${customerId} AND ci.integrationId = c.id
+    )`;
+}
+
 async function genesisAuth(req, res, next) {
   const customerId = req.headers['x-genesis-customer-id'];
   const authToken = req.headers['x-genesis-auth-token'];
@@ -312,6 +332,13 @@ async function genesisAuth(req, res, next) {
       return res.status(403).json({ error: 'Invalid Genesis Authentication' });
     }
 
+    try {
+      await addMissingIntegrations(customer.id);
+    } catch (error) {
+      // Not fatal: a concurrent request may have inserted the same rows
+      console.warn('addMissingIntegrations failed:', error?.message || error);
+    }
+
     req.customer = customer;
     next();
   } catch (error) {
@@ -324,6 +351,12 @@ async function genesisAuth(req, res, next) {
 
 // Health
 app.get('/api/ping', (_req, res) => res.json({ ok: true }));
+
+// API docs (Swagger UI) + raw OpenAPI spec
+if (!isProd || ENABLE_API_DOCS === 'true') {
+  app.get('/api/docs.json', (_req, res) => res.json(openapiSpec));
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec, { swaggerOptions: { persistAuthorization: true } }));
+}
 
 // (1) Server-to-server: host backend sends the real token, receives a single-use code (~60s)
 app.post('/api/code', strictLimiter, genesisAuth, (req, res) => {
@@ -429,7 +462,7 @@ app.post('/api/session/nonce', requireSession, async (req, res) => {
 app.get('/api/integrations', requireSession, async (req, res) => {
   try {
     const availableApps = await prisma.customerIntegration.findMany({
-      where: { customerId: req.customer.id, isEnabled: true },
+      where: { customerId: req.customer.id, isEnabled: true, integration: { isGlobalActive: true } },
       include: { integration: true },
     });
 
@@ -490,6 +523,50 @@ app.get('/api/credentials/:integrationId', requireSession, async (req, res) => {
     res.status(500).json({ error: 'Failed to load credentials' });
   }
 });
+
+/* ------------ wizard steps: data sync + schedule (JSON payload per customer/integration) ------------ */
+function configPayloadRoutes(path, model, label) {
+  app.get(`${path}/:integrationId`, requireSession, async (req, res) => {
+    try {
+      const row = await model.findUnique({
+        where: { customerId_integrationId: { customerId: req.customer.id, integrationId: req.params.integrationId } },
+      });
+      res.json({ configPayload: row ? row.configPayload : null });
+    } catch (error) {
+      console.error(`Failed to load ${label}:`, error);
+      res.status(500).json({ error: `Failed to load ${label}` });
+    }
+  });
+
+  app.post(`${path}/:integrationId`, requireSession, async (req, res) => {
+    const { integrationId } = req.params;
+    const configPayload = JSON.stringify(req.body ?? {});
+    try {
+      await model.upsert({
+        where: { customerId_integrationId: { customerId: req.customer.id, integrationId } },
+        update: { configPayload },
+        create: { customerId: req.customer.id, integrationId, configPayload },
+      });
+      res.json({ success: true, message: `${label} saved successfully` });
+    } catch (error) {
+      console.error(`Failed to save ${label}:`, error);
+      res.status(500).json({ error: `Failed to save ${label}` });
+    }
+  });
+}
+
+configPayloadRoutes('/api/data-sync', prisma.dataSyncCredential, 'Data sync settings');
+configPayloadRoutes('/api/schedule', prisma.scheduleCredential, 'Schedule settings');
+
+/* ------------ admin: integrations catalog CRUD (x-admin-key) ------------ */
+function requireAdmin(req, res, next) {
+  if (!ADMIN_API_KEY) return res.status(503).json({ error: 'admin_disabled' });
+  const key = req.headers['x-admin-key'];
+  if (!key || !safeEqual(key, ADMIN_API_KEY)) return res.status(401).json({ error: 'unauthorized' });
+  next();
+}
+
+app.use('/api/admin/catalog', requireAdmin, createCatalogRouter(prisma));
 
 /* ------------ start ------------ */
 app.listen(Number(PORT), () => {

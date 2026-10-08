@@ -50,3 +50,21 @@ export interface NetsuiteConfigure extends IntegrationConfigure {
   numberofRetries?: string;
   maxConcurrentConnections?: string;
 }
+// Wizard step 3 (stored in DataSyncCredential.configPayload). Mock options for now.
+export interface DataSyncConfig {
+  syncDirection: "genesis_to_app" | "app_to_genesis" | "bidirectional";
+  objects: string[];
+  syncMode: "incremental" | "full";
+  conflictResolution: "genesis_wins" | "app_wins";
+}
+
+// Wizard step 4 (stored in ScheduleCredential.configPayload)
+export interface ScheduleConfig {
+  enabled: boolean;
+  frequency: "every_15_minutes" | "hourly" | "daily" | "weekly";
+  time: string;
+  dayOfWeek: string;
+  timezone: string;
+  notifyOnFailure: boolean;
+  notificationEmail: string;
+}

@@ -177,13 +177,19 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
           {integrations.map((item) => {
             const comingSoon = COMING_SOON_IDS.has(item.id);
+            // Not connected: dimmed (restored on hover/focus). Coming soon: dimmed, not clickable.
+            const dimClass = comingSoon
+              ? "grayscale opacity-50"
+              : item.isConfigured
+                ? ""
+                : "grayscale opacity-60 group-hover:grayscale-0 group-hover:opacity-100 group-focus-visible:grayscale-0 group-focus-visible:opacity-100";
             return (
             <button
               key={item.id}
               onClick={() => onSelectIntegration(item)}
               disabled={comingSoon}
               aria-label={comingSoon ? `${item.name} (coming soon)` : undefined}
-              className={`box-border bg-white border border-[#E5E7EB] rounded-[12px] text-center transition-all duration-[120ms] ease-in-out flex flex-col items-center justify-center aspect-square p-4 relative ${
+              className={`group box-border bg-white border border-[#E5E7EB] rounded-[12px] text-center transition-all duration-[120ms] ease-in-out flex flex-col items-center justify-center aspect-square p-4 relative ${
                 comingSoon
                   ? "cursor-not-allowed"
                   : "cursor-pointer hover:border-2 hover:border-[#003F9C] hover:-m-[1px] focus-visible:border-2 focus-visible:border-[#003F9C] focus-visible:-m-[1px] focus-visible:outline-none"
@@ -197,32 +203,20 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
                 </div>
               )}
 
-              {item.isConfigured && (
-                <span
-                  className="absolute top-2 right-2 w-2.5 h-2.5 bg-green-500 rounded-full"
-                  title="Configured"
-                />
-              )}
+              <div className={`flex flex-col items-center transition-[filter,opacity] duration-[120ms] ${dimClass}`}>
+                <div className="w-12 h-12 flex items-center justify-center mb-3">
+                  <img src={item.iconUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
+                </div>
 
-              <div className="w-12 h-12 flex items-center justify-center mb-3">
-                <img src={item.iconUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
+                <h3 className="m-0 text-[14px] font-bold text-[#000000] leading-normal mb-2">{item.name}</h3>
+
+                <span className="inline-flex items-center justify-center h-[24px] px-[12px] rounded-[40px] bg-[#F1F5F9] text-[14px] font-normal text-[#000000] leading-normal">
+                  {item.badge || item.category || "Data"}
+                </span>
               </div>
-
-              <h3 className="m-0 text-[14px] font-bold text-[#000000] leading-normal mb-2">{item.name}</h3>
-
-              <span className="inline-flex items-center justify-center h-[24px] px-[12px] rounded-[40px] bg-[#F1F5F9] text-[14px] font-normal text-[#000000] leading-normal">
-                {item.badge || item.category || "Data"}
-              </span>
             </button>
             );
           })}
-
-          {[...Array(Math.max(0, 8 - integrations.length))].map((_, emptyBox) => (
-            <div
-              key={`empty-${emptyBox}`}
-              className="box-border bg-white border border-[#E5E7EB] rounded-[12px] aspect-square"
-            />
-          ))}
         </div>
       </div>
     </div>
