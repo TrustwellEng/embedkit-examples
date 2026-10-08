@@ -23,6 +23,8 @@ const {
   FRONTEND_URL = '/',
   // One-time code TTL (seconds)
   CODE_TTL_SEC = '60',
+  // Genesis GraphQL API used to validate x-genesis-auth-token
+  GENESIS_API_URL = 'https://api-dev.trustwell.com/genesis',
   EMBEDKIT_SERVER_BASE,
   API_URL,
   API_ACCOUNT_ID,
@@ -231,6 +233,52 @@ const DEFAULT_INTEGRATIONS = [
   { integrationId: 'slack_integration', isEnabled: true },
 ];
 
+// Minimal query that only succeeds with a valid Genesis API key
+const GENESIS_VALIDATE_QUERY = {
+  query: `
+    query($input: FoodSearchInput!) {
+      foods {
+        search(input: $input) {
+          foodSearchResults { id name }
+        }
+      }
+    }
+  `,
+  variables: {
+    input: {
+      searchText: '',
+      foodTypes: ['Recipe'],
+      itemSourceFilter: 'Customer',
+      versionFilter: 'Latest',
+      documentStatusFilter: 'All',
+      archiveFilter: 'Unarchived',
+      first: 1,
+      after: 0,
+    },
+  },
+};
+
+// Returns true if Genesis accepts the token, false if it rejects it.
+// Throws when Genesis is unreachable or returns an unexpected error.
+async function validateGenesisToken(authToken) {
+  const r = await fetch(GENESIS_API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-API-KEY': String(authToken) },
+    body: JSON.stringify(GENESIS_VALIDATE_QUERY),
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (r.status === 401 || r.status === 403) return false;
+  if (!r.ok) throw new Error(`Genesis API responded ${r.status}`);
+
+  const body = await r.json().catch(() => null);
+  if (body?.errors?.length) {
+    console.warn('Genesis token validation returned GraphQL errors:', JSON.stringify(body.errors).slice(0, 500));
+    return false;
+  }
+  return true;
+}
+
 async function genesisAuth(req, res, next) {
   const customerId = req.headers['x-genesis-customer-id'];
   const authToken = req.headers['x-genesis-auth-token'];
@@ -240,12 +288,20 @@ async function genesisAuth(req, res, next) {
   }
 
   try {
+    if (!(await validateGenesisToken(authToken))) {
+      return res.status(403).json({ error: 'Invalid Genesis API token' });
+    }
+  } catch (error) {
+    console.error('Genesis token validation failed:', error?.message || error);
+    return res.status(502).json({ error: 'genesis_unreachable' });
+  }
+
+  try {
     const genesisId = String(customerId);
     let customer = await prisma.customer.findUnique({ where: { genesisId } });
 
     if (!customer) {
-      // WARNING: creates a customer for any token (trust on first use).
-      // Should validate the token with Genesis before creating, and store a hash instead of plain text.
+      // First request for this customer: token was validated by Genesis above
       customer = await prisma.customer.create({
         data: { genesisId, genesisAuthToken: String(authToken) },
       });

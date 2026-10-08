@@ -11,6 +11,8 @@ const IS_DEV = import.meta.env.DEV;
 
 type Status = "loading" | "ready" | "unauthorized" | "error";
 
+const COMING_SOON_IDS = new Set(["sap_s4hana", "netsuite"]);
+
 const inputClass =
   "box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors";
 
@@ -67,7 +69,13 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
         },
       });
       if (!res.ok) {
-        throw new Error(res.status === 403 ? "Invalid Genesis ID or token." : "Login failed.");
+        throw new Error(
+          res.status === 403
+            ? "Invalid Genesis ID or token."
+            : res.status === 502
+              ? "Unable to reach Genesis to validate the token."
+              : "Login failed."
+        );
       }
       const { code } = await res.json();
       await exchangeCode(code);
@@ -167,12 +175,28 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
       <div className="max-w-[1200px] mx-auto">
         <h1 className="text-xl font-bold text-black mb-6">Integrations</h1>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {integrations.map((item) => (
+          {integrations.map((item) => {
+            const comingSoon = COMING_SOON_IDS.has(item.id);
+            return (
             <button
               key={item.id}
               onClick={() => onSelectIntegration(item)}
-              className="box-border bg-white border border-[#E5E7EB] rounded-[12px] text-center cursor-pointer transition-all duration-[120ms] ease-in-out flex flex-col items-center justify-center aspect-square p-4 hover:border-2 hover:border-[#003F9C] hover:-m-[1px] focus-visible:border-2 focus-visible:border-[#003F9C] focus-visible:-m-[1px] focus-visible:outline-none relative"
+              disabled={comingSoon}
+              aria-label={comingSoon ? `${item.name} (coming soon)` : undefined}
+              className={`box-border bg-white border border-[#E5E7EB] rounded-[12px] text-center transition-all duration-[120ms] ease-in-out flex flex-col items-center justify-center aspect-square p-4 relative ${
+                comingSoon
+                  ? "cursor-not-allowed"
+                  : "cursor-pointer hover:border-2 hover:border-[#003F9C] hover:-m-[1px] focus-visible:border-2 focus-visible:border-[#003F9C] focus-visible:-m-[1px] focus-visible:outline-none"
+              }`}
             >
+              {comingSoon && (
+                <div className="pointer-events-none absolute top-0 left-0 w-[110px] h-[110px] overflow-hidden rounded-tl-[12px]">
+                  <span className="absolute top-[22px] -left-[34px] w-[140px] -rotate-45 bg-[#F59E0B] text-white text-[11px] font-semibold uppercase tracking-wide text-center py-1 shadow-sm">
+                    Coming soon
+                  </span>
+                </div>
+              )}
+
               {item.isConfigured && (
                 <span
                   className="absolute top-2 right-2 w-2.5 h-2.5 bg-green-500 rounded-full"
@@ -190,7 +214,8 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
                 {item.badge || item.category || "Data"}
               </span>
             </button>
-          ))}
+            );
+          })}
 
           {[...Array(Math.max(0, 8 - integrations.length))].map((_, emptyBox) => (
             <div
