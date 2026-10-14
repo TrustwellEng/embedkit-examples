@@ -28,9 +28,26 @@ model IntegrationsCatalog {
   isGlobalActive Boolean @default(true)
 
   customers   CustomerIntegration[]
+  sourceInfos IntegrationSourceInfo[]
   credentials ConnectionCredential[]
   dataSyncs   DataSyncCredential[]
   schedules   ScheduleCredential[]
+}
+
+// Per-source (GF / FLQ) display overrides. Null fields fall back to IntegrationsCatalog.
+// isActive = false hides the integration for that source.
+model IntegrationSourceInfo {
+  integrationId String  @db.VarChar(50)
+  source        String  @db.VarChar(10)
+  name          String? @db.NVarChar(100)
+  category      String? @db.NVarChar(50)
+  iconUrl       String? @db.VarChar(500)
+  badge         String? @db.NVarChar(50)
+  isActive      Boolean @default(true)
+
+  integration IntegrationsCatalog @relation(fields: [integrationId], references: [id])
+
+  @@id([integrationId, source])
 }
 
 model CustomerIntegration {

@@ -38,12 +38,23 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
   return res;
 }
 
+// Host app the page is embedded in: ?source=GF (Genesis, default) or ?source=FLQ (Food LogiQ).
+// Sent once at code exchange; the server keeps it in the session for every API call.
+export type Source = "GF" | "FLQ";
+const SOURCES: Source[] = ["GF", "FLQ"];
+const DEFAULT_SOURCE: Source = "GF";
+
+export function getSource(): Source {
+  const value = new URL(window.location.href).searchParams.get("source")?.toUpperCase();
+  return SOURCES.find((s) => s === value) ?? DEFAULT_SOURCE;
+}
+
 export async function exchangeCode(code: string) {
   const res = await fetch(`${base}/api/session/exchange`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ code, source: getSource() }),
   });
   if (!res.ok) throw new Error(res.status === 401 ? "Invalid or expired code." : "Unable to start session.");
   const { token } = await res.json();

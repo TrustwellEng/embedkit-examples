@@ -6,6 +6,7 @@ export interface Integration {
   badge: string;
   isFeatured?: boolean;
   isConfigured?: boolean;
+  isEnabled?: boolean;
 }
 
 export interface IntegrationConfigure {

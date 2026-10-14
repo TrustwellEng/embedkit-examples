@@ -11,7 +11,16 @@ const IS_DEV = import.meta.env.DEV;
 
 type Status = "loading" | "ready" | "unauthorized" | "error";
 
-const COMING_SOON_IDS = new Set(["sap_s4hana", "netsuite"]);
+const COMING_SOON_IDS = new Set(["sap_s4hana", "netsuite", "oracle_gsm"]);
+
+// Display order: active (configured) -> enabled -> disabled -> coming soon. Ties keep the server order.
+function statusRank(item: Integration) {
+  if (COMING_SOON_IDS.has(item.id)) return 3;
+  if (item.isEnabled === false) return 2;
+  return item.isConfigured ? 0 : 1;
+}
+
+const sortIntegrations = (items: Integration[]) => [...items].sort((a, b) => statusRank(a) - statusRank(b));
 
 const inputClass =
   "box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors";
@@ -39,7 +48,7 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
         return;
       }
       if (!res.ok) throw new Error("Unable to fetch integrations list from server.");
-      setIntegrations(await res.json());
+      setIntegrations(sortIntegrations(await res.json()));
       setStatus("ready");
     } catch (err: any) {
       if (err?.name === "AbortError") return;

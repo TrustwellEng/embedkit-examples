@@ -10,6 +10,14 @@ const unauthorized = error({ description: 'Missing, invalid or expired session',
 const adminUnauthorized = error({ description: 'Missing or wrong `x-admin-key`', error: 'unauthorized' });
 const adminDisabled = error({ description: '`ADMIN_API_KEY` is not set on the server', error: 'admin_disabled' });
 const rateLimited = error({ description: 'Too many requests', error: 'rate_limited' });
+const integrationNotFound = error({
+  description: "Integration not enabled for this customer, inactive, or hidden for the session's source",
+  error: 'integration_not_found',
+});
+
+// Host app: Genesis (GF) or Food LogiQ (FLQ)
+const sourceSchema = { type: 'string', enum: ['GF', 'FLQ'], default: 'GF' };
+const sourceDescription = 'Host app the page was opened from: GF = Genesis, FLQ = Food LogiQ. Defaults to GF.';
 
 const catalogIdParam = {
   name: 'id',
@@ -62,7 +70,7 @@ export const openapiSpec = {
         type: 'object',
         properties: {
           id: { type: 'string', example: 'oracle' },
-          name: { type: 'string', example: 'Oracle Database' },
+          name: { type: 'string', example: 'Oracle PLM Cloud' },
           category: { type: 'string', example: 'Database' },
           iconUrl: { type: 'string', nullable: true },
           badge: { type: 'string', nullable: true, example: 'Database' },
@@ -162,9 +170,13 @@ export const openapiSpec = {
         tags: ['Auth'],
         summary: 'Exchange code via redirect',
         description: 'For iframes pointing directly at the API. Sets the `sid` cookie and redirects to `FRONTEND_URL`. Without `code`, falls through to other handlers.',
-        parameters: [{ name: 'code', in: 'query', required: true, schema: { type: 'string' } }],
+        parameters: [
+          { name: 'code', in: 'query', required: true, schema: { type: 'string' } },
+          { name: 'source', in: 'query', required: false, schema: sourceSchema, description: sourceDescription },
+        ],
         responses: {
           302: { description: 'Session cookie set; redirect to FRONTEND_URL' },
+          400: { description: 'Invalid source', content: { 'text/plain': { example: 'Invalid source' } } },
           401: { description: 'Invalid or expired code', content: { 'text/plain': { example: 'Invalid or expired code' } } },
           429: rateLimited,
         },
@@ -175,10 +187,17 @@ export const openapiSpec = {
       post: {
         tags: ['Auth'],
         summary: 'Exchange code for a session token',
-        description: 'Returns a Bearer token and also sets the `sid` cookie. `code` may be sent in the body or as `?code=`. Rate limit: 20/min.',
+        description:
+          'Returns a Bearer token and also sets the `sid` cookie. `code` and `source` may be sent in the body or as query params. ' +
+          '`source` is stored in the session and applies to every later API call. Rate limit: 20/min.',
         requestBody: {
           content: {
-            'application/json': { schema: { type: 'object', properties: { code: { type: 'string' } } } },
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: { code: { type: 'string' }, source: { ...sourceSchema, description: sourceDescription } },
+              },
+            },
           },
         },
         responses: {
@@ -192,12 +211,14 @@ export const openapiSpec = {
                     token: { type: 'string' },
                     tokenType: { type: 'string', example: 'Bearer' },
                     expiresIn: { type: 'integer', example: 7200 },
+                    source: { type: 'string', enum: ['GF', 'FLQ'], example: 'GF' },
                     customer: { type: 'object', properties: { genesisId: { type: 'string' } } },
                   },
                 },
               },
             },
           },
+          400: error({ description: 'Invalid source', error: 'invalid_source' }),
           401: error({ description: 'Invalid or expired code', error: 'invalid_or_expired_code' }),
           429: rateLimited,
         },
@@ -210,7 +231,7 @@ export const openapiSpec = {
         summary: 'Current session',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         responses: {
-          200: { description: 'Logged in', content: { 'application/json': { example: { ok: true, customer: { genesisId: '12345' } } } } },
+          200: { description: 'Logged in', content: { 'application/json': { example: { ok: true, source: 'GF', customer: { genesisId: '12345' } } } } },
           401: unauthorized,
         },
       },
@@ -255,7 +276,9 @@ export const openapiSpec = {
       get: {
         tags: ['Integrations'],
         summary: "List the customer's enabled integrations",
-        description: 'Only integrations enabled for this customer and globally active in the catalog.',
+        description:
+          'Only integrations enabled for this customer and globally active in the catalog. ' +
+          "Name, category, icon and badge come from IntegrationSourceInfo for the session's source, falling back to the catalog.",
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         responses: {
           200: {
@@ -283,6 +306,7 @@ export const openapiSpec = {
             },
           },
           401: unauthorized,
+          404: integrationNotFound,
         },
       },
       post: {
@@ -305,6 +329,7 @@ export const openapiSpec = {
             content: { 'application/json': { example: { success: true, message: 'Credentials saved successfully' } } },
           },
           401: unauthorized,
+          404: integrationNotFound,
         },
       },
     },
@@ -424,6 +449,7 @@ function wizardStepPaths(label, example) {
           },
         },
         401: unauthorized,
+        404: integrationNotFound,
       },
     },
     post: {
@@ -438,6 +464,7 @@ function wizardStepPaths(label, example) {
       responses: {
         200: { description: 'Saved', content: { 'application/json': { example: { success: true } } } },
         401: unauthorized,
+        404: integrationNotFound,
       },
     },
   };

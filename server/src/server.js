@@ -156,11 +156,23 @@ function cookieOptions() {
 
 const SESSION_TTL_SEC = 2 * 60 * 60;
 
+// Which host app the page was opened from: Genesis (GF, default) or Food LogiQ (FLQ).
+// Comes from ?source= on the iframe URL, is fixed at code exchange and kept in the session token.
+const SOURCES = new Set(['GF', 'FLQ']);
+const DEFAULT_SOURCE = 'GF';
+
+// Missing -> GF; unknown value -> null (caller returns 400)
+function parseSource(value) {
+  if (value === undefined || value === null || value === '') return DEFAULT_SOURCE;
+  const source = String(value).toUpperCase();
+  return SOURCES.has(source) ? source : null;
+}
+
 // Returns a session token and also sets the `sid` cookie.
 // - Browsers allowing third-party cookies (Chrome/CHIPS): use the cookie.
 // - Safari / iframes with blocked cookies, Postman: send the token via `Authorization: Bearer <token>`.
-function startSession(res, customer) {
-  const token = jwt.sign({ sub: customer.genesisId }, JWT_SECRET, { expiresIn: SESSION_TTL_SEC });
+function startSession(res, customer, source) {
+  const token = jwt.sign({ sub: customer.genesisId, src: source }, JWT_SECRET, { expiresIn: SESSION_TTL_SEC });
   res.cookie('sid', token, { ...cookieOptions(), maxAge: SESSION_TTL_SEC * 1000 });
   return token;
 }
@@ -187,6 +199,8 @@ async function requireSession(req, res, next) {
     const customer = await prisma.customer.findUnique({ where: { genesisId: String(claims.sub) } });
     if (!customer) return res.status(401).json({ error: 'unauthorized' });
     req.customer = customer;
+    // Tokens issued before the source flag existed have no `src` -> GF
+    req.source = SOURCES.has(claims.src) ? claims.src : DEFAULT_SOURCE;
     next();
   } catch (error) {
     console.error('requireSession error:', error);
@@ -379,11 +393,13 @@ app.get('/', strictLimiter, async (req, res, next) => {
   if (typeof code !== 'string' || !code) return next(); // no code: let the frontend/other routes handle it
 
   res.set('Cache-Control', 'no-store');
+  const source = parseSource(req.query.source);
+  if (!source) return res.status(400).send('Invalid source');
   try {
     const customer = await exchangeCode(code);
     if (!customer) return res.status(401).send('Invalid or expired code');
 
-    startSession(res, customer);
+    startSession(res, customer, source);
     // Redirect so the code drops out of the URL
     return res.redirect(302, FRONTEND_URL);
   } catch (error) {
@@ -396,15 +412,19 @@ app.get('/', strictLimiter, async (req, res, next) => {
 // The frontend is served from another host (nginx), so it reads ?code= and calls this endpoint.
 app.post('/api/session/exchange', strictLimiter, async (req, res) => {
   res.set('Cache-Control', 'no-store');
+  // Checked before the code is consumed so a bad source doesn't burn the code
+  const source = parseSource(req.body?.source ?? req.query.source);
+  if (!source) return res.status(400).json({ error: 'invalid_source' });
   try {
     const customer = await exchangeCode(req.body?.code ?? req.query.code);
     if (!customer) return res.status(401).json({ error: 'invalid_or_expired_code' });
 
-    const token = startSession(res, customer);
+    const token = startSession(res, customer, source);
     return res.json({
       token,
       tokenType: 'Bearer',
       expiresIn: SESSION_TTL_SEC,
+      source,
       customer: { genesisId: customer.genesisId },
     });
   } catch (error) {
@@ -415,7 +435,7 @@ app.post('/api/session/exchange', strictLimiter, async (req, res) => {
 
 // Current session
 app.get('/api/session', requireSession, (req, res) => {
-  res.json({ ok: true, customer: { genesisId: req.customer.genesisId } });
+  res.json({ ok: true, source: req.source, customer: { genesisId: req.customer.genesisId } });
 });
 
 // Logout
@@ -460,21 +480,30 @@ app.post('/api/session/nonce', requireSession, async (req, res) => {
 
 /* ------------ integrations (session-authenticated, no Genesis headers/query) ------------ */
 app.get('/api/integrations', requireSession, async (req, res) => {
+  const { source } = req;
   try {
     const availableApps = await prisma.customerIntegration.findMany({
-      where: { customerId: req.customer.id, isEnabled: true, integration: { isGlobalActive: true } },
-      include: { integration: true },
+      where: {
+        customerId: req.customer.id,
+        isEnabled: true,
+        integration: { isGlobalActive: true, sourceInfos: { none: { source, isActive: false } } },
+      },
+      include: { integration: { include: { sourceInfos: { where: { source } } } } },
     });
 
     res.json(
-      availableApps.map((item) => ({
-        id: item.integration.id,
-        name: item.integration.name,
-        category: item.integration.category,
-        iconUrl: item.integration.iconUrl,
-        badge: item.integration.badge,
-        isConfigured: item.isConfigured,
-      }))
+      availableApps.map(({ integration, isConfigured }) => {
+        // Per-source info overrides the catalog; null fields fall back to it
+        const info = integration.sourceInfos[0] || {};
+        return {
+          id: integration.id,
+          name: info.name ?? integration.name,
+          category: info.category ?? integration.category,
+          iconUrl: info.iconUrl ?? integration.iconUrl,
+          badge: info.badge ?? integration.badge,
+          isConfigured,
+        };
+      })
     );
   } catch (error) {
     console.error('Failed to load integrations:', error);
@@ -482,7 +511,27 @@ app.get('/api/integrations', requireSession, async (req, res) => {
   }
 });
 
-app.post('/api/credentials/:integrationId', requireSession, async (req, res) => {
+// Integration must be enabled for this customer, globally active and not hidden for the session's source
+async function requireIntegration(req, res, next) {
+  try {
+    const found = await prisma.customerIntegration.findFirst({
+      where: {
+        customerId: req.customer.id,
+        integrationId: req.params.integrationId,
+        isEnabled: true,
+        integration: { isGlobalActive: true, sourceInfos: { none: { source: req.source, isActive: false } } },
+      },
+      select: { integrationId: true },
+    });
+    if (!found) return res.status(404).json({ error: 'integration_not_found' });
+    next();
+  } catch (error) {
+    console.error('requireIntegration error:', error);
+    res.status(500).json({ error: 'Failed to load integration' });
+  }
+}
+
+app.post('/api/credentials/:integrationId', requireSession, requireIntegration, async (req, res) => {
   const { integrationId } = req.params;
   try {
     const configPayload = JSON.stringify(req.body);
@@ -511,7 +560,7 @@ app.post('/api/credentials/:integrationId', requireSession, async (req, res) => 
   }
 });
 
-app.get('/api/credentials/:integrationId', requireSession, async (req, res) => {
+app.get('/api/credentials/:integrationId', requireSession, requireIntegration, async (req, res) => {
   const { integrationId } = req.params;
   try {
     const credential = await prisma.connectionCredential.findFirst({
@@ -526,7 +575,7 @@ app.get('/api/credentials/:integrationId', requireSession, async (req, res) => {
 
 /* ------------ wizard steps: data sync + schedule (JSON payload per customer/integration) ------------ */
 function configPayloadRoutes(path, model, label) {
-  app.get(`${path}/:integrationId`, requireSession, async (req, res) => {
+  app.get(`${path}/:integrationId`, requireSession, requireIntegration, async (req, res) => {
     try {
       const row = await model.findUnique({
         where: { customerId_integrationId: { customerId: req.customer.id, integrationId: req.params.integrationId } },
@@ -538,7 +587,7 @@ function configPayloadRoutes(path, model, label) {
     }
   });
 
-  app.post(`${path}/:integrationId`, requireSession, async (req, res) => {
+  app.post(`${path}/:integrationId`, requireSession, requireIntegration, async (req, res) => {
     const { integrationId } = req.params;
     const configPayload = JSON.stringify(req.body ?? {});
     try {
