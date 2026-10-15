@@ -2,103 +2,96 @@ import React, { useState, useEffect } from "react";
 import { apiFetch } from "../service/session";
 import { DataSyncConfig, Integration, IntegrationConfigure, NetsuiteConfigure, OracleConfigure, SapConfigure, ScheduleConfig, SlackConfigure } from "../data/integrations";
 import { Stepper } from "./wizard/Stepper";
-import { CompleteStep, DataSyncStep, DEFAULT_DATA_SYNC, defaultSchedule, ScheduleStep, WelcomeStep } from "./wizard/steps";
-import { StepFooter } from "./wizard/ui";
+import {
+  CompleteStep,
+  DataSyncStep,
+  DEFAULT_DATA_SYNC,
+  defaultSchedule,
+  DeliveryStep,
+  isSlackIntegration,
+  isValidSlackChannel,
+  ScheduleStep,
+  SLACK_CHANNEL_ERROR,
+  WelcomeStep,
+} from "./wizard/steps";
+import { Field, inputClass, StepFooter } from "./wizard/ui";
 
 interface DetailProps {
   integration: Integration;
   onBack: () => void;
 }
 
-const SlackDetails = ({ formData, handleChange }: { formData: SlackConfigure; handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) => (
+type SlackFieldErrors = { accessToken?: string; channelName?: string };
+
+const SlackDetails = ({
+  formData,
+  handleChange,
+  errors,
+}: {
+  formData: SlackConfigure;
+  handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  errors: SlackFieldErrors;
+}) => (
   <>
-    <div className="flex flex-col">
-      <label className="block text-[14px] font-semibold text-black mb-1">Client ID</label>
+    <Field label="Client ID" htmlFor="clientId" hint="Found under Basic Information → App Credentials in your Slack app settings">
+      <input id="clientId" type="text" name="clientId" value={formData.clientId || ""} onChange={handleChange} className={inputClass} />
+    </Field>
+    <Field
+      label="Client Secret"
+      htmlFor="clientSerect"
+      hint="Found under Basic Information → App Credentials. It's encrypted and stored securely."
+    >
+      <input id="clientSerect" type="password" name="clientSerect" value={formData.clientSerect || ""} onChange={handleChange} className={`${inputClass} font-mono`} />
+    </Field>
+    <Field
+      label="Bot Access Token"
+      htmlFor="accessToken"
+      hint={'Found under OAuth & Permissions. Starts with "xoxb-". It\'s encrypted and stored securely.'}
+      error={errors.accessToken}
+    >
       <input
-        type="text"
-        name="clientId"
-        value={formData.clientId || ""}
-        onChange={handleChange}
-        className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
-      />
-    </div>
-
-    <div className="flex flex-col">
-      <label className="block text-[14px] font-semibold text-black mb-1">Client Secret</label>
-      <input
-        type="password"
-        name="clientSerect"
-        value={formData.clientSerect || ""}
-        onChange={handleChange}
-        className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] font-mono leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
-      />
-    </div>
-
-    <div className="flex flex-col">
-      <label className="block text-[14px] font-semibold text-black mb-1">Access Token</label>
-      <input
+        id="accessToken"
         type="password"
         name="accessToken"
         value={formData.accessToken || ""}
         onChange={handleChange}
-        className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] font-mono leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
+        aria-invalid={!!errors.accessToken}
+        className={`${inputClass} font-mono`}
       />
-    </div>
-
-    <div className="flex flex-col">
-      <label className="block text-[14px] font-semibold text-black mb-1">Channel Name</label>
+    </Field>
+    <Field
+      label="Channel"
+      htmlFor="channelName"
+      hint="The channel where messages are posted (e.g., #trustwell-alerts). For private channels, invite the Slack app to the channel first."
+      error={errors.channelName}
+    >
       <input
+        id="channelName"
         type="text"
         name="channelName"
         value={formData.channelName || ""}
         onChange={handleChange}
-        className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
+        placeholder="#trustwell-alerts"
+        aria-invalid={!!errors.channelName}
+        className={inputClass}
       />
-    </div>
+    </Field>
   </>
 );
 const DefaultDetails = ({ formData, handleChange }: { formData: OracleConfigure; handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) => (
   <>
-    <div className="flex flex-col">
-      <label className="block text-[14px] font-semibold text-black mb-1">API_URL</label>
-      <input
-        type="text"
-        name="apiUrl"
-        value={formData.apiUrl || ""}
-        onChange={handleChange}
-        className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
-      />
-    </div>
-    <div className="flex flex-col">
-      <label className="block text-[14px] font-semibold text-black mb-1">API_ACCOUNT_ID</label>
-      <input
-        type="text"
-        name="apiAccountId"
-        value={formData.apiAccountId || ""}
-        onChange={handleChange}
-        className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
-      />
-    </div>
-    <div className="flex flex-col">
-      <label className="block text-[14px] font-semibold text-black mb-1">API_USERNAME</label>
-      <input
-        type="text"
-        name="apiUsername"
-        value={formData.apiUsername|| ""}
-        onChange={handleChange}
-        className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
-      />
-    </div>
-    <div className="flex flex-col">
-      <label className="block text-[14px] font-semibold text-black mb-1">API_TOKEN</label>
-      <input
-        type="password"
-        name="apiToken"
-        value={formData.apiToken || ""}
-        onChange={handleChange}
-        className="box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] font-mono leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors"
-      />
-    </div>
+    <Field label="API URL" htmlFor="apiUrl" hint="The base URL of your Oracle PLM Cloud instance (e.g., https://yourcompany.oraclecloud.com)">
+      <input id="apiUrl" type="url" name="apiUrl" value={formData.apiUrl || ""} onChange={handleChange} className={inputClass} />
+    </Field>
+    <Field label="Account ID" htmlFor="apiAccountId" hint="Your Oracle PLM Cloud account identifier">
+      <input id="apiAccountId" type="text" name="apiAccountId" value={formData.apiAccountId || ""} onChange={handleChange} className={inputClass} />
+    </Field>
+    <Field label="Username" htmlFor="apiUsername" hint="The integration user's username. We recommend a dedicated service account.">
+      <input id="apiUsername" type="text" name="apiUsername" value={formData.apiUsername || ""} onChange={handleChange} className={inputClass} />
+    </Field>
+    <Field label="API token" htmlFor="apiToken" hint="The API token for this user. It's encrypted and stored securely.">
+      <input id="apiToken" type="password" name="apiToken" value={formData.apiToken || ""} onChange={handleChange} className={`${inputClass} font-mono`} />
+    </Field>
   </>
 );
 const SapDetails = ({ formData, handleChange }: { formData: SapConfigure; handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) => (
@@ -321,6 +314,9 @@ const NetsuiteDetails = ({ formData, handleChange }: { formData: NetsuiteConfigu
 );
 
 const STEPS = ["Welcome", "Connection", "Data sync", "Schedule", "Complete"];
+// Slack sends events in real time, so step 4 sets up delivery instead of a schedule
+const SLACK_STEPS = ["Welcome", "Connection", "Data sync", "Delivery", "Complete"];
+const SLACK_CONNECTION_ERROR = "We couldn't connect to Slack. Check your credentials and confirm the app is installed in your workspace.";
 const STEP = { welcome: 0, connection: 1, dataSync: 2, schedule: 3, complete: 4 } as const;
 
 // Load a saved JSON payload (configPayload) from one of the wizard endpoints; null if none saved
@@ -347,7 +343,7 @@ async function savePayload(path: string, body: unknown) {
 
 function defaultConnection(integration: Integration): IntegrationConfigure {
   const id = integration.id;
-  if (id === "slack_integration" || id === "stack_integration") {
+  if (isSlackIntegration(id)) {
     return { id, clientId: "", clientSerect: "", accessToken: "", channelName: "" } as SlackConfigure;
   }
   if (id === "netsuite") {
@@ -379,10 +375,12 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [slackErrors, setSlackErrors] = useState<SlackFieldErrors>({});
 
-  const isSlack = integration.id === "slack_integration" || integration.id === "stack_integration";
+  const isSlack = isSlackIntegration(integration.id);
   const isSap = integration.id === "sap_s4hana";
   const isNetsuite = integration.id === "netsuite";
+  const isOracle = integration.id === "oracle";
 
   const stepPaths: Record<FormStep, string> = {
     connection: `/api/credentials/${integration.id}`,
@@ -427,12 +425,12 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
   }, [integration.id]);
 
   // Save a form step. `force` saves even without edits (explicit "Save & continue").
-  const persist = async (key: FormStep, force: boolean) => {
+  const persist = async (key: FormStep, force: boolean, value: unknown = stepValues[key]) => {
     if (!force && !dirty[key]) return true;
     setSaving(true);
     setError(null);
     try {
-      await savePayload(stepPaths[key], stepValues[key]);
+      await savePayload(stepPaths[key], value);
       setSaved((v) => ({ ...v, [key]: true }));
       setDirty((v) => ({ ...v, [key]: false }));
       return true;
@@ -453,8 +451,8 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
     setStep(next);
   };
 
-  const saveAndContinue = async (key: FormStep, next: number) => {
-    if (await persist(key, true)) setStep(next);
+  const saveAndContinue = async (key: FormStep, next: number, value?: unknown) => {
+    if (await persist(key, true, value ?? stepValues[key])) setStep(next);
   };
 
   const markDirty = (key: FormStep) => {
@@ -472,11 +470,69 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
       [name]: value,
     }));
     markDirty("connection");
+    if (name in slackErrors) setSlackErrors((v) => ({ ...v, [name]: undefined }));
   };
 
-  const handleConnectionSubmit = (e: React.FormEvent) => {
+  // Slack: check the fields, then confirm the token works and remember the workspace name
+  const testSlackConnection = async (): Promise<SlackConfigure | null> => {
+    const slack = formData as SlackConfigure;
+    const errors: SlackFieldErrors = {};
+    if (!slack.accessToken?.trim().startsWith("xoxb-")) errors.accessToken = "Enter a valid bot token (starts with xoxb-).";
+    if (!isValidSlackChannel(slack.channelName)) errors.channelName = SLACK_CHANNEL_ERROR;
+    setSlackErrors(errors);
+    if (errors.accessToken || errors.channelName) return null;
+
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/api/slack/${integration.id}/test-connection`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accessToken: slack.accessToken!.trim() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) throw new Error();
+      const next = { ...slack, accessToken: slack.accessToken!.trim(), workspaceName: data.workspaceName };
+      setFormData(next);
+      return next;
+    } catch {
+      setError(SLACK_CONNECTION_ERROR);
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleConnectionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    saveAndContinue("connection", STEP.dataSync);
+    if (!isSlack) return saveAndContinue("connection", STEP.dataSync);
+    const tested = await testSlackConnection();
+    if (tested) saveAndContinue("connection", STEP.dataSync, tested);
+  };
+
+  // Slack delivery: the channel lives on the connection, so save it before the delivery settings
+  const handleDeliverySubmit = async () => {
+    if (!(await persist("connection", false))) return;
+    saveAndContinue("schedule", STEP.complete);
+  };
+
+  const sendSlackTestMessage = async (): Promise<string | null> => {
+    if (!(await persist("connection", false))) return "Couldn't save the channel. Please try again.";
+    try {
+      const res = await apiFetch(`/api/slack/${integration.id}/test-message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel: (formData as SlackConfigure).channelName }),
+      });
+      if (res.ok) return null;
+      const data = await res.json().catch(() => null);
+      if (data?.error === "channel_not_found" || data?.error === "not_in_channel") {
+        return "Trustwell can't post to this channel. Check the name, and for private channels invite the app first.";
+      }
+      return SLACK_CONNECTION_ERROR;
+    } catch {
+      return SLACK_CONNECTION_ERROR;
+    }
   };
 
   const completed = [
@@ -499,12 +555,12 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
               <h2 className="text-lg font-bold text-gray-950">Connection</h2>
               <p className="text-sm text-gray-600 mt-1">
                 {isSlack
-                  ? "Configure Client credentials and channel settings for your integration."
-                  : "Configure connection credentials for database integration."}
+                  ? "Enter your Slack app credentials and the channel where Trustwell should post messages. You can find these in your Slack app settings at api.slack.com/apps."
+                  : `Enter the API credentials for your ${integration.name} account. Your ${isOracle ? "Oracle" : integration.name} administrator can provide these.`}
               </p>
             </div>
             {isSlack ? (
-              <SlackDetails formData={formData} handleChange={handleChange} />
+              <SlackDetails formData={formData} handleChange={handleChange} errors={slackErrors} />
             ) : isSap ? (
               <SapDetails formData={formData} handleChange={handleChange} />
             ) : isNetsuite ? (
@@ -512,13 +568,19 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
             ) : (
               <DefaultDetails formData={formData} handleChange={handleChange} />
             )}
-            <StepFooter onBack={() => goTo(STEP.welcome)} submitLabel="Save & continue" saving={saving} error={error} />
+            <StepFooter
+              onBack={() => goTo(STEP.welcome)}
+              submitLabel={isOracle || isSlack ? "Test & continue" : "Save & continue"}
+              saving={saving}
+              error={error}
+            />
           </form>
         );
 
       case STEP.dataSync:
         return (
           <DataSyncStep
+            integration={integration}
             value={dataSync}
             onChange={(v) => {
               setDataSync(v);
@@ -532,6 +594,27 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
         );
 
       case STEP.schedule:
+        if (isSlack) {
+          return (
+            <DeliveryStep
+              value={schedule}
+              onChange={(v) => {
+                setSchedule(v);
+                markDirty("schedule");
+              }}
+              channel={(formData as SlackConfigure).channelName || ""}
+              onChannelChange={(channelName) => {
+                setFormData((prev) => ({ ...prev, channelName }));
+                markDirty("connection");
+              }}
+              onSendTest={sendSlackTestMessage}
+              onBack={() => goTo(STEP.dataSync)}
+              onSubmit={handleDeliverySubmit}
+              saving={saving}
+              error={error}
+            />
+          );
+        }
         return (
           <ScheduleStep
             value={schedule}
@@ -550,6 +633,7 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
         return (
           <CompleteStep
             integration={integration}
+            connection={formData}
             dataSync={dataSync}
             schedule={schedule}
             saved={saved}
@@ -583,7 +667,7 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
             <div className="py-12 text-center text-gray-600 text-sm">Loading configuration...</div>
           ) : (
             <>
-              <Stepper steps={STEPS} current={step} completed={completed} disabled={saving} onSelect={goTo} />
+              <Stepper steps={isSlack ? SLACK_STEPS : STEPS} current={step} completed={completed} disabled={saving} onSelect={goTo} />
               {renderStep()}
             </>
           )}

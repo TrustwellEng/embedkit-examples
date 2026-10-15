@@ -9,10 +9,11 @@ export const primaryButtonClass =
 export const secondaryButtonClass =
   "px-5 py-2.5 text-[14px] font-medium text-gray-800 bg-white border border-gray-400 rounded-[6px] hover:bg-gray-100 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] disabled:opacity-50 transition-colors";
 
-export const Field: React.FC<React.PropsWithChildren<{ label: string; htmlFor?: string; hint?: string }>> = ({
+export const Field: React.FC<React.PropsWithChildren<{ label: string; htmlFor?: string; hint?: string; error?: string | null }>> = ({
   label,
   htmlFor,
   hint,
+  error,
   children,
 }) => (
   <div className="flex flex-col">
@@ -21,6 +22,11 @@ export const Field: React.FC<React.PropsWithChildren<{ label: string; htmlFor?: 
     </label>
     {children}
     {hint && <p className="mt-1 text-[13px] text-gray-600">{hint}</p>}
+    {error && (
+      <p role="alert" className="mt-1 text-[13px] font-medium text-red-700">
+        {error}
+      </p>
+    )}
   </div>
 );
 

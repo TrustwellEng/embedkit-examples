@@ -609,6 +609,55 @@ function configPayloadRoutes(path, model, label) {
 configPayloadRoutes('/api/data-sync', prisma.dataSyncCredential, 'Data sync settings');
 configPayloadRoutes('/api/schedule', prisma.scheduleCredential, 'Schedule settings');
 
+/* ------------ Slack wizard: test connection + test message ------------ */
+async function callSlack(method, token, body) {
+  const r = await fetch(`https://slack.com/api/${method}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body ?? {}),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!r.ok) throw new Error(`Slack API responded ${r.status}`);
+  return r.json();
+}
+
+// Checks the bot token before the connection step is saved; returns the workspace name
+app.post('/api/slack/:integrationId/test-connection', strictLimiter, requireSession, requireIntegration, async (req, res) => {
+  const token = String(req.body?.accessToken ?? '');
+  if (!token.startsWith('xoxb-')) return res.status(400).json({ error: 'invalid_token' });
+  try {
+    const result = await callSlack('auth.test', token);
+    if (!result.ok) return res.status(400).json({ error: result.error || 'slack_connection_failed' });
+    res.json({ ok: true, workspaceName: result.team });
+  } catch (error) {
+    console.error('Slack test connection failed:', error);
+    res.status(502).json({ error: 'slack_unreachable' });
+  }
+});
+
+// Posts a test message to a channel using the saved bot token
+app.post('/api/slack/:integrationId/test-message', strictLimiter, requireSession, requireIntegration, async (req, res) => {
+  const channel = String(req.body?.channel ?? '').trim().replace(/^#/, '');
+  if (!channel) return res.status(400).json({ error: 'channel_required' });
+  try {
+    const credential = await prisma.connectionCredential.findFirst({
+      where: { customerId: req.customer.id, integrationId: req.params.integrationId },
+    });
+    const token = credential ? JSON.parse(credential.configPayload)?.accessToken : null;
+    if (!token) return res.status(400).json({ error: 'not_connected' });
+
+    const result = await callSlack('chat.postMessage', token, {
+      channel,
+      text: 'This is a test message from Trustwell. Notifications will be posted to this channel.',
+    });
+    if (!result.ok) return res.status(400).json({ error: result.error || 'slack_post_failed' });
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Slack test message failed:', error);
+    res.status(502).json({ error: 'slack_unreachable' });
+  }
+});
+
 /* ------------ admin: integrations catalog CRUD (x-admin-key) ------------ */
 function requireAdmin(req, res, next) {
   if (!ADMIN_API_KEY) return res.status(503).json({ error: 'admin_disabled' });

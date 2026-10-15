@@ -29,6 +29,8 @@ export interface SlackConfigure extends IntegrationConfigure  {
   clientSerect?: string; 
   accessToken?: string;
   channelName?: string;
+  // Filled in by the Slack connection test (auth.test)
+  workspaceName?: string;
 }
 
 export interface SapConfigure extends IntegrationConfigure  {
