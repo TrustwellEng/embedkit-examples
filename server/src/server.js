@@ -243,11 +243,6 @@ function safeEqual(a, b) {
 
 /* ------------ Genesis token validation (only used by POST /api/code) ------------ */
 const DEFAULT_INTEGRATIONS = [
-  { integrationId: 'algolia', isEnabled: false },
-  { integrationId: 'amazon-s3', isEnabled: false },
-  { integrationId: 'bigquery', isEnabled: false },
-  { integrationId: 'calendly', isEnabled: false },
-  { integrationId: 'confluence', isEnabled: false },
   { integrationId: 'netsuite', isEnabled: true },
   { integrationId: 'oracle', isEnabled: true },
   { integrationId: 'sap_s4hana', isEnabled: true },
@@ -482,17 +477,17 @@ app.post('/api/session/nonce', requireSession, async (req, res) => {
 app.get('/api/integrations', requireSession, async (req, res) => {
   const { source } = req;
   try {
+    // Customer-disabled apps are returned too (shown greyed out); globally inactive or source-hidden ones are not
     const availableApps = await prisma.customerIntegration.findMany({
       where: {
         customerId: req.customer.id,
-        isEnabled: true,
         integration: { isGlobalActive: true, sourceInfos: { none: { source, isActive: false } } },
       },
       include: { integration: { include: { sourceInfos: { where: { source } } } } },
     });
 
     res.json(
-      availableApps.map(({ integration, isConfigured }) => {
+      availableApps.map(({ integration, isEnabled, isConfigured }) => {
         // Per-source info overrides the catalog; null fields fall back to it
         const info = integration.sourceInfos[0] || {};
         return {
@@ -502,6 +497,13 @@ app.get('/api/integrations', requireSession, async (req, res) => {
           iconUrl: info.iconUrl ?? integration.iconUrl,
           badge: info.badge ?? integration.badge,
           isConfigured,
+          status: integration.isComingSoon
+            ? 'coming_soon'
+            : !isEnabled
+              ? 'disabled'
+              : isConfigured
+                ? 'connected'
+                : 'not_connected',
         };
       })
     );
@@ -511,7 +513,7 @@ app.get('/api/integrations', requireSession, async (req, res) => {
   }
 });
 
-// Integration must be enabled for this customer, globally active and not hidden for the session's source
+// Integration must be enabled for this customer, globally active, released and not hidden for the session's source
 async function requireIntegration(req, res, next) {
   try {
     const found = await prisma.customerIntegration.findFirst({
@@ -519,7 +521,7 @@ async function requireIntegration(req, res, next) {
         customerId: req.customer.id,
         integrationId: req.params.integrationId,
         isEnabled: true,
-        integration: { isGlobalActive: true, sourceInfos: { none: { source: req.source, isActive: false } } },
+        integration: { isGlobalActive: true, isComingSoon: false, sourceInfos: { none: { source: req.source, isActive: false } } },
       },
       select: { integrationId: true },
     });

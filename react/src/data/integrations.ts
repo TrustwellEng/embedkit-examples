@@ -1,3 +1,6 @@
+// Card state, computed by GET /api/integrations
+export type IntegrationStatus = "connected" | "not_connected" | "disabled" | "coming_soon";
+
 export interface Integration {
   id: string;
   name: string;
@@ -7,6 +10,7 @@ export interface Integration {
   isFeatured?: boolean;
   isConfigured?: boolean;
   isEnabled?: boolean;
+  status: IntegrationStatus;
 }
 
 export interface IntegrationConfigure {

@@ -32,9 +32,10 @@ function parseCatalogBody(body, { partial }) {
     data[field] = value.trim();
   }
 
-  if (body.isGlobalActive !== undefined) {
-    if (typeof body.isGlobalActive !== 'boolean') return { error: 'isGlobalActive must be a boolean' };
-    data.isGlobalActive = body.isGlobalActive;
+  for (const flag of ['isGlobalActive', 'isComingSoon']) {
+    if (body[flag] === undefined) continue;
+    if (typeof body[flag] !== 'boolean') return { error: `${flag} must be a boolean` };
+    data[flag] = body[flag];
   }
   return { data };
 }

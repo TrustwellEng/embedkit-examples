@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Integration } from "../data/integrations";
+import { Integration, IntegrationStatus } from "../data/integrations";
 import { apiFetch, exchangeCode, exchangeCodeFromUrl } from "../service/session";
 
 interface LandingProps {
@@ -11,16 +11,16 @@ const IS_DEV = import.meta.env.DEV;
 
 type Status = "loading" | "ready" | "unauthorized" | "error";
 
-const COMING_SOON_IDS = new Set(["sap_s4hana", "netsuite", "oracle_gsm"]);
+// Display order: connected -> not connected -> disabled -> coming soon. Ties keep the server order.
+const STATUS_RANK: Record<IntegrationStatus, number> = {
+  connected: 0,
+  not_connected: 1,
+  disabled: 2,
+  coming_soon: 3,
+};
 
-// Display order: active (configured) -> enabled -> disabled -> coming soon. Ties keep the server order.
-function statusRank(item: Integration) {
-  if (COMING_SOON_IDS.has(item.id)) return 3;
-  if (item.isEnabled === false) return 2;
-  return item.isConfigured ? 0 : 1;
-}
-
-const sortIntegrations = (items: Integration[]) => [...items].sort((a, b) => statusRank(a) - statusRank(b));
+const sortIntegrations = (items: Integration[]) =>
+  [...items].sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status]);
 
 const inputClass =
   "box-border w-full h-[40px] px-[12px] bg-white border border-gray-400 rounded-[6px] text-gray-900 text-[14px] leading-[1.2] placeholder-gray-500 hover:border-gray-600 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] focus:border-[#0071EC] focus:ring-0 transition-colors";
@@ -184,50 +184,91 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
       <div className="max-w-[1200px] mx-auto">
         <h1 className="text-xl font-bold text-black mb-6">Integrations</h1>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {integrations.map((item) => {
-            const comingSoon = COMING_SOON_IDS.has(item.id);
-            // Not connected: dimmed (restored on hover/focus). Coming soon: dimmed, not clickable.
-            const dimClass = comingSoon
-              ? "grayscale opacity-50"
-              : item.isConfigured
-                ? ""
-                : "grayscale opacity-60 group-hover:grayscale-0 group-hover:opacity-100 group-focus-visible:grayscale-0 group-focus-visible:opacity-100";
-            return (
-            <button
-              key={item.id}
-              onClick={() => onSelectIntegration(item)}
-              disabled={comingSoon}
-              aria-label={comingSoon ? `${item.name} (coming soon)` : undefined}
-              className={`group box-border bg-white border border-[#E5E7EB] rounded-[12px] text-center transition-all duration-[120ms] ease-in-out flex flex-col items-center justify-center aspect-square p-4 relative ${
-                comingSoon
-                  ? "cursor-not-allowed"
-                  : "cursor-pointer hover:border-2 hover:border-[#003F9C] hover:-m-[1px] focus-visible:border-2 focus-visible:border-[#003F9C] focus-visible:-m-[1px] focus-visible:outline-none"
-              }`}
-            >
-              {comingSoon && (
-                <div className="pointer-events-none absolute top-0 left-0 w-[110px] h-[110px] overflow-hidden rounded-tl-[12px]">
-                  <span className="absolute top-[22px] -left-[34px] w-[140px] -rotate-45 bg-[#F59E0B] text-white text-[11px] font-semibold uppercase tracking-wide text-center py-1 shadow-sm">
-                    Coming soon
-                  </span>
-                </div>
-              )}
-
-              <div className={`flex flex-col items-center transition-[filter,opacity] duration-[120ms] ${dimClass}`}>
-                <div className="w-12 h-12 flex items-center justify-center mb-3">
-                  <img src={item.iconUrl} alt={item.name} className="max-h-full max-w-full object-contain" />
-                </div>
-
-                <h3 className="m-0 text-[14px] font-bold text-[#000000] leading-normal mb-2">{item.name}</h3>
-
-                <span className="inline-flex items-center justify-center h-[24px] px-[12px] rounded-[40px] bg-[#F1F5F9] text-[14px] font-normal text-[#000000] leading-normal">
-                  {item.badge || item.category || "Data"}
-                </span>
-              </div>
-            </button>
-            );
-          })}
+          {integrations.map((item) => (
+            <IntegrationCard key={item.id} item={item} onSelect={() => onSelectIntegration(item)} />
+          ))}
         </div>
       </div>
+    </div>
+  );
+};
+
+const DISABLED_HINT = "Contact your admin to enable this app";
+
+const cardBase =
+  "group box-border h-full min-h-[220px] bg-white border border-[#E5E7EB] rounded-[12px] text-center transition-all duration-[120ms] ease-in-out flex flex-col items-center justify-center p-4 relative";
+const cardInteractive =
+  "cursor-pointer hover:border-2 hover:border-[#003F9C] hover:-m-[1px] focus-visible:border-2 focus-visible:border-[#003F9C] focus-visible:-m-[1px] focus-visible:outline-none";
+
+// Connected / not connected: clickable button. Disabled / coming soon: plain element, not clickable.
+const IntegrationCard: React.FC<{ item: Integration; onSelect: () => void }> = ({ item, onSelect }) => {
+  const { status } = item;
+
+  const body = (
+    <div
+      className={`flex flex-col items-center ${
+        status === "disabled" ? "grayscale opacity-50" : status === "coming_soon" ? "opacity-60" : ""
+      }`}
+    >
+      <div className="w-12 h-12 flex items-center justify-center mb-3">
+        <img src={item.iconUrl} alt="" className="max-h-full max-w-full object-contain" />
+      </div>
+
+      <h3 className="m-0 text-[14px] font-bold text-[#000000] leading-normal mb-2">{item.name}</h3>
+
+      <span className="inline-flex items-center justify-center h-[24px] px-[12px] rounded-[40px] bg-[#F1F5F9] text-[14px] font-normal text-[#000000] leading-normal">
+        {item.badge || item.category || "Data"}
+      </span>
+
+      {status === "connected" && (
+        <span className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#15803D]">
+          <span aria-hidden="true" className="w-2 h-2 rounded-full bg-[#16A34A]" />
+          Connected
+        </span>
+      )}
+
+      {/* Connecting is done in the DB (CustomerIntegration.isConfigured), so there is no Connect button */}
+      {status === "not_connected" && <span className="mt-3 text-[13px] text-gray-500">Not connected</span>}
+
+      {status === "disabled" && <span className="mt-3 text-[13px] font-medium text-gray-600">Unavailable</span>}
+    </div>
+  );
+
+  if (status === "connected" || status === "not_connected") {
+    return (
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-label={`${item.name}, ${status === "connected" ? "connected" : "not connected"}`}
+        className={`${cardBase} ${cardInteractive}`}
+      >
+        {body}
+      </button>
+    );
+  }
+
+  if (status === "disabled") {
+    return (
+      <div
+        role="group"
+        aria-disabled="true"
+        aria-label={`${item.name}, unavailable. ${DISABLED_HINT}`}
+        title={DISABLED_HINT}
+        className={`${cardBase} cursor-not-allowed`}
+      >
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <div role="group" aria-label={`${item.name}, coming soon`} className={`${cardBase} cursor-default`}>
+      <div className="pointer-events-none absolute top-0 left-0 w-[110px] h-[110px] overflow-hidden rounded-tl-[12px]">
+        <span className="absolute top-[22px] -left-[34px] w-[140px] -rotate-45 bg-[#F59E0B] text-white text-[11px] font-semibold uppercase tracking-wide text-center py-1 shadow-sm">
+          Coming soon
+        </span>
+      </div>
+      {body}
     </div>
   );
 };

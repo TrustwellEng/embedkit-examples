@@ -26,6 +26,8 @@ model IntegrationsCatalog {
   iconUrl        String? @db.VarChar(500)
   badge          String? @db.NVarChar(50)
   isGlobalActive Boolean @default(true)
+  // Planned but not released: shown with a "Coming soon" ribbon, cannot be opened
+  isComingSoon   Boolean @default(false)
 
   customers   CustomerIntegration[]
   sourceInfos IntegrationSourceInfo[]

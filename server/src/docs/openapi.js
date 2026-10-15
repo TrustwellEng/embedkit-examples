@@ -73,8 +73,14 @@ export const openapiSpec = {
           name: { type: 'string', example: 'Oracle PLM Cloud' },
           category: { type: 'string', example: 'Database' },
           iconUrl: { type: 'string', nullable: true },
-          badge: { type: 'string', nullable: true, example: 'Database' },
+          badge: { type: 'string', nullable: true, example: 'Premium' },
           isConfigured: { type: 'boolean' },
+          status: {
+            type: 'string',
+            enum: ['connected', 'not_connected', 'disabled', 'coming_soon'],
+            description:
+              '`coming_soon`: catalog isComingSoon. `disabled`: not enabled for this customer (cannot be opened). Otherwise `connected` / `not_connected` from isConfigured.',
+          },
         },
       },
       CatalogItem: {
@@ -86,6 +92,7 @@ export const openapiSpec = {
           iconUrl: { type: 'string', nullable: true, example: 'https://cdn.simpleicons.org/hubspot' },
           badge: { type: 'string', nullable: true, example: 'CRM' },
           isGlobalActive: { type: 'boolean', example: true },
+          isComingSoon: { type: 'boolean', example: false },
         },
       },
       CatalogCreate: {
@@ -98,6 +105,7 @@ export const openapiSpec = {
           iconUrl: { type: 'string', maxLength: 500, nullable: true, example: 'https://cdn.simpleicons.org/hubspot' },
           badge: { type: 'string', maxLength: 50, nullable: true, example: 'CRM' },
           isGlobalActive: { type: 'boolean', default: true },
+          isComingSoon: { type: 'boolean', default: false },
           enableForCustomers: {
             type: 'boolean',
             default: true,
@@ -124,6 +132,7 @@ export const openapiSpec = {
           iconUrl: { type: 'string', maxLength: 500, nullable: true },
           badge: { type: 'string', maxLength: 50, nullable: true },
           isGlobalActive: { type: 'boolean' },
+          isComingSoon: { type: 'boolean' },
         },
         example: { name: 'HubSpot CRM', badge: null },
       },
