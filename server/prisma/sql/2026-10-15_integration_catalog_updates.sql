@@ -2,7 +2,7 @@
 --   1. Add IntegrationsCatalog.isComingSoon
 --   2. Add Google Suite (coming soon) and give it to every customer
 --   3. Remove Amazon S3, BigQuery, Calendly, Confluence and Algolia (and all their child rows)
---   4. Flag coming-soon apps: SAP S/4HANA, NetSuite, Oracle GSM, Google Suite
+--   4. Flag coming-soon apps: SAP S/4HANA, NetSuite, Oracle GSM, Google Suite, Microsoft Teams
 --   5. Badges: Standard for Slack, Microsoft Teams, Google Suite; Premium for every other integration
 --
 -- Before running: deploy the server version that no longer lists the removed apps in DEFAULT_INTEGRATIONS,
@@ -96,7 +96,7 @@ DROP TABLE #toRemove;
 
 -- 4. Coming soon
 UPDATE [dbo].[IntegrationsCatalog]
-SET [isComingSoon] = CASE WHEN [id] IN ('sap_s4hana', 'netsuite', 'oracle_gsm', 'google_suite') THEN 1 ELSE 0 END;
+SET [isComingSoon] = CASE WHEN [id] IN ('sap_s4hana', 'netsuite', 'oracle_gsm', 'google_suite', 'teams') THEN 1 ELSE 0 END;
 PRINT CONCAT('Catalog rows coming-soon flag set: ', @@ROWCOUNT);
 
 -- 5. Standard / Premium badges; per-source badge overrides are cleared so every source shows the tier
