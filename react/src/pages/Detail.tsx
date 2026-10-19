@@ -316,6 +316,9 @@ const NetsuiteDetails = ({ formData, handleChange }: { formData: NetsuiteConfigu
 const STEPS = ["Welcome", "Connection", "Data sync", "Schedule", "Complete"];
 // Slack sends events in real time, so step 4 sets up delivery instead of a schedule
 const SLACK_STEPS = ["Welcome", "Connection", "Data sync", "Delivery", "Complete"];
+// Temporarily off: Slack connection step saves without checking the token/channel or calling auth.test.
+// Set to true to turn the checks back on.
+const SLACK_CONNECTION_TEST_ENABLED = false;
 const SLACK_CONNECTION_ERROR = "We couldn't connect to Slack. Check your credentials and confirm the app is installed in your workspace.";
 const STEP = { welcome: 0, connection: 1, dataSync: 2, schedule: 3, complete: 4 } as const;
 
@@ -505,7 +508,7 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
 
   const handleConnectionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isSlack) return saveAndContinue("connection", STEP.dataSync);
+    if (!isSlack || !SLACK_CONNECTION_TEST_ENABLED) return saveAndContinue("connection", STEP.dataSync);
     const tested = await testSlackConnection();
     if (tested) saveAndContinue("connection", STEP.dataSync, tested);
   };
@@ -570,7 +573,7 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
             )}
             <StepFooter
               onBack={() => goTo(STEP.welcome)}
-              submitLabel={isOracle || isSlack ? "Test & continue" : "Save & continue"}
+              submitLabel={isOracle || (isSlack && SLACK_CONNECTION_TEST_ENABLED) ? "Test & continue" : "Save & continue"}
               saving={saving}
               error={error}
             />
