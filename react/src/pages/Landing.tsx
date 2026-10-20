@@ -271,11 +271,8 @@ const CardBody: React.FC<{ item: Integration; className: string; children?: Reac
       <img src={item.iconUrl} alt="" className="max-h-full max-w-full object-contain" />
     </div>
 
-    <h3 className="m-0 text-[14px] font-bold text-[#000000] leading-normal mb-2">{item.name}</h3>
-
-    <span className="inline-flex items-center justify-center h-[24px] px-[12px] rounded-[40px] bg-[#F1F5F9] text-[14px] font-normal text-[#000000] leading-normal">
-      {item.badge || item.category || "Data"}
-    </span>
+    {/* Tier (Standard / Premium) is shown by the group header, not on the card */}
+    <h3 className="m-0 text-[14px] font-bold text-[#000000] leading-normal">{item.name}</h3>
 
     {children}
   </div>
