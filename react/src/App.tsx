@@ -11,6 +11,7 @@ import TopNav from './components/TopNav';
 import { Landing } from "./pages/Landing";
 import { Integration } from "./data/integrations";
 import { Detail } from "./pages/Detail";
+import { RequestLicense } from "./pages/RequestLicense";
 
 const AppShell: React.FC = () => {
   const [selectedApp, setSelectedApp] = useState<Integration | null>(null);
@@ -43,6 +44,9 @@ const AppShell: React.FC = () => {
     <div className="app-container">
       {!selectedApp ? (
         <Landing onSelectIntegration={handleSelectIntegration} />
+      ) : selectedApp.status === "disabled" ? (
+        // Premium without a license: "Request" opens the contact page instead of the wizard
+        <RequestLicense integration={selectedApp} onBack={handleBackToLanding} />
       ) : (
         <Detail
           integration={selectedApp}

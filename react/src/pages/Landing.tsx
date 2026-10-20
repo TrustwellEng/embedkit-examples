@@ -179,20 +179,68 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
     );
   }
 
+  const standard = integrations.filter(isStandard);
+  const premium = integrations.filter((item) => !isStandard(item));
+  const standardUsed = standard.filter((item) => item.status === "connected").length;
+
   return (
     <div className="min-h-screen bg-white py-8 px-8">
       <div className="max-w-[1200px] mx-auto">
         <h1 className="text-xl font-bold text-black mb-6">Integrations</h1>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {integrations.map((item) => (
-            <IntegrationCard key={item.id} item={item} onSelect={() => onSelectIntegration(item)} />
-          ))}
-        </div>
+
+        {standard.length > 0 && (
+          <IntegrationGroup
+            title="Standard"
+            subtitle={`Bundle of ${STANDARD_BUNDLE_SIZE}`}
+            description={`One subscription covers up to ${STANDARD_BUNDLE_SIZE} standard integrations.`}
+            usage={`${standardUsed} of ${STANDARD_BUNDLE_SIZE} used`}
+            items={standard}
+            onSelect={onSelectIntegration}
+          />
+        )}
+
+        {premium.length > 0 && (
+          <IntegrationGroup
+            title="Premium"
+            subtitle="Licensed individually"
+            description="Each premium integration is purchased separately."
+            items={premium}
+            onSelect={onSelectIntegration}
+          />
+        )}
       </div>
     </div>
   );
 };
 
+// Group comes from the catalog badge (Standard / Premium); anything not Standard is Premium
+const STANDARD_BUNDLE_SIZE = 3;
+const isStandard = (item: Integration) => item.badge?.trim().toLowerCase() === "standard";
+
+const IntegrationGroup: React.FC<{
+  title: string;
+  subtitle: string;
+  description: string;
+  usage?: string;
+  items: Integration[];
+  onSelect: (integration: Integration) => void;
+}> = ({ title, subtitle, description, usage, items, onSelect }) => (
+  <section className="mb-10" aria-label={`${title} integrations`}>
+    <div className="flex items-baseline justify-between gap-4">
+      <h2 className="text-[14px] font-bold text-black">
+        <span className="uppercase tracking-wide">{title}</span>
+        <span className="font-normal text-gray-600"> · {subtitle}</span>
+      </h2>
+      {usage && <span className="text-[14px] text-gray-600 shrink-0">{usage}</span>}
+    </div>
+    <p className="text-[14px] text-gray-600 mt-1 mb-4">{description}</p>
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+      {items.map((item) => (
+        <IntegrationCard key={item.id} item={item} onSelect={() => onSelect(item)} />
+      ))}
+    </div>
+  </section>
+);
 const DISABLED_HINT = "Contact your admin to enable this app";
 
 const cardBase =
@@ -200,59 +248,118 @@ const cardBase =
 const cardInteractive =
   "cursor-pointer hover:border-2 hover:border-[#003F9C] hover:-m-[1px] focus-visible:border-2 focus-visible:border-[#003F9C] focus-visible:-m-[1px] focus-visible:outline-none";
 
-// Connected / not connected: clickable button. Disabled / coming soon: plain element, not clickable.
+const ConnectedStatus = () => (
+  <span className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#15803D]">
+    <span aria-hidden="true" className="w-2 h-2 rounded-full bg-[#16A34A]" />
+    Connected
+  </span>
+);
+
+const CardAction: React.FC<{ label: string }> = ({ label }) => (
+  <span className="mt-1 text-[13px] font-semibold text-[#003F9C] group-hover:underline">
+    {label} <span aria-hidden="true">→</span>
+  </span>
+);
+
+const CardBody: React.FC<{ item: Integration; className: string; children?: React.ReactNode }> = ({
+  item,
+  className,
+  children,
+}) => (
+  <div className={`flex flex-col items-center ${className}`}>
+    <div className="w-12 h-12 flex items-center justify-center mb-3">
+      <img src={item.iconUrl} alt="" className="max-h-full max-w-full object-contain" />
+    </div>
+
+    <h3 className="m-0 text-[14px] font-bold text-[#000000] leading-normal mb-2">{item.name}</h3>
+
+    <span className="inline-flex items-center justify-center h-[24px] px-[12px] rounded-[40px] bg-[#F1F5F9] text-[14px] font-normal text-[#000000] leading-normal">
+      {item.badge || item.category || "Data"}
+    </span>
+
+    {children}
+  </div>
+);
+
+// Standard:  connected -> Connected; not connected -> Available (opens the wizard)
+// Premium:   connected -> Connected; not connected -> Licensed + Set up (wizard);
+//            disabled (not enabled for the customer) -> Not licensed + Request (contact page)
+// Coming soon: "Coming soon" ribbon, not clickable
 const IntegrationCard: React.FC<{ item: Integration; onSelect: () => void }> = ({ item, onSelect }) => {
   const { status } = item;
+  const standard = isStandard(item);
 
-  const body = (
-    <div
-      className={`flex flex-col items-center ${
-        status === "disabled" ? "grayscale opacity-50" : status === "coming_soon" ? "opacity-60" : ""
-      }`}
-    >
-      <div className="w-12 h-12 flex items-center justify-center mb-3">
-        <img src={item.iconUrl} alt="" className="max-h-full max-w-full object-contain" />
-      </div>
-
-      <h3 className="m-0 text-[14px] font-bold text-[#000000] leading-normal mb-2">{item.name}</h3>
-
-      <span className="inline-flex items-center justify-center h-[24px] px-[12px] rounded-[40px] bg-[#F1F5F9] text-[14px] font-normal text-[#000000] leading-normal">
-        {item.badge || item.category || "Data"}
-      </span>
-
-      {status === "connected" && (
-        <span className="mt-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#15803D]">
-          <span aria-hidden="true" className="w-2 h-2 rounded-full bg-[#16A34A]" />
-          Connected
-        </span>
-      )}
-
-      {/* Connecting is done in the DB (CustomerIntegration.isConfigured), so there is no Connect button */}
-      {status === "not_connected" && <span className="mt-3 text-[13px] text-gray-500">Not connected</span>}
-
-      {status === "disabled" && <span className="mt-3 text-[13px] font-medium text-gray-600">Unavailable</span>}
-    </div>
-  );
-
-  if (status === "connected" || status === "not_connected") {
+  if (status === "coming_soon") {
     return (
-      <button
-        type="button"
-        onClick={onSelect}
-        aria-label={`${item.name}, ${status === "connected" ? "connected" : "not connected"}`}
-        className={`${cardBase} ${cardInteractive}`}
-      >
-        {body}
-      </button>
+      <div role="group" aria-label={`${item.name}, coming soon`} className={`${cardBase} cursor-default`}>
+        <div className="pointer-events-none absolute top-0 left-0 w-[110px] h-[110px] overflow-hidden rounded-tl-[12px]">
+          <span className="absolute top-[22px] -left-[34px] w-[140px] -rotate-45 bg-[#F59E0B] text-white text-[11px] font-semibold uppercase tracking-wide text-center py-1 shadow-sm">
+            Coming soon
+          </span>
+        </div>
+        <CardBody item={item} className="opacity-60" />
+      </div>
     );
   }
 
-  if (status === "disabled") {
+  const inactive = standard && status === "disabled";
+
+  let statusNode: React.ReactNode;
+  let statusLabel: string;
+  if (status === "connected") {
+    statusNode = <ConnectedStatus />;
+    statusLabel = "connected";
+  } else if (standard) {
+    // Connecting is done through the wizard (CustomerIntegration.isConfigured)
+    statusNode =
+      status === "not_connected" ? (
+        <span className="mt-3 inline-flex items-center gap-1.5 text-[13px] text-gray-600">
+          <span aria-hidden="true" className="w-2 h-2 rounded-full border border-gray-500" />
+          Available
+        </span>
+      ) : (
+        <span className="mt-3 text-[13px] font-medium text-gray-600">Unavailable</span>
+      );
+    statusLabel = status === "not_connected" ? "available" : `unavailable. ${DISABLED_HINT}`;
+  } else if (status === "not_connected") {
+    statusNode = (
+      <>
+        <span className="mt-3 inline-flex items-center gap-1.5 text-[13px] text-gray-600">
+          <span aria-hidden="true" className="w-2 h-2 rounded-full border border-gray-500" />
+          Licensed
+        </span>
+        <CardAction label="Set up" />
+      </>
+    );
+    statusLabel = "licensed, set up";
+  } else {
+    statusNode = (
+      <>
+        <span className="mt-3 inline-flex items-center gap-1.5 text-[13px] text-gray-600">
+          <svg viewBox="0 0 16 16" className="w-3 h-3" aria-hidden="true">
+            <rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor" />
+            <path d="M5.5 7V5a2.5 2.5 0 015 0v2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          </svg>
+          Not licensed
+        </span>
+        <CardAction label="Request" />
+      </>
+    );
+    statusLabel = "not licensed, request access";
+  }
+
+  const body = (
+    <CardBody item={item} className={inactive ? "grayscale opacity-50" : ""}>
+      {statusNode}
+    </CardBody>
+  );
+
+  if (inactive) {
     return (
       <div
         role="group"
         aria-disabled="true"
-        aria-label={`${item.name}, unavailable. ${DISABLED_HINT}`}
+        aria-label={`${item.name}, ${statusLabel}`}
         title={DISABLED_HINT}
         className={`${cardBase} cursor-not-allowed`}
       >
@@ -262,13 +369,13 @@ const IntegrationCard: React.FC<{ item: Integration; onSelect: () => void }> = (
   }
 
   return (
-    <div role="group" aria-label={`${item.name}, coming soon`} className={`${cardBase} cursor-default`}>
-      <div className="pointer-events-none absolute top-0 left-0 w-[110px] h-[110px] overflow-hidden rounded-tl-[12px]">
-        <span className="absolute top-[22px] -left-[34px] w-[140px] -rotate-45 bg-[#F59E0B] text-white text-[11px] font-semibold uppercase tracking-wide text-center py-1 shadow-sm">
-          Coming soon
-        </span>
-      </div>
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-label={`${item.name}, ${statusLabel}`}
+      className={`${cardBase} ${cardInteractive}`}
+    >
       {body}
-    </div>
+    </button>
   );
 };
