@@ -241,8 +241,6 @@ const IntegrationGroup: React.FC<{
     </div>
   </section>
 );
-const DISABLED_HINT = "Contact your admin to enable this app";
-
 const cardBase =
   "group box-border h-full min-h-[220px] bg-white border border-[#E5E7EB] rounded-[12px] text-center transition-all duration-[120ms] ease-in-out flex flex-col items-center justify-center p-4 relative";
 const cardInteractive =
@@ -278,7 +276,8 @@ const CardBody: React.FC<{ item: Integration; className: string; children?: Reac
   </div>
 );
 
-// Standard:  connected -> Connected; not connected -> Available (opens the wizard)
+// Standard:  connected -> Connected; not connected -> Available (opens the wizard);
+//            disabled -> Unavailable + Request (contact page)
 // Premium:   connected -> Connected; not connected -> Licensed + Set up (wizard);
 //            disabled (not enabled for the customer) -> Not licensed + Request (contact page)
 // Coming soon: "Coming soon" ribbon, not clickable
@@ -299,8 +298,6 @@ const IntegrationCard: React.FC<{ item: Integration; onSelect: () => void }> = (
     );
   }
 
-  const inactive = standard && status === "disabled";
-
   let statusNode: React.ReactNode;
   let statusLabel: string;
   if (status === "connected") {
@@ -315,9 +312,12 @@ const IntegrationCard: React.FC<{ item: Integration; onSelect: () => void }> = (
           Available
         </span>
       ) : (
-        <span className="mt-3 text-[13px] font-medium text-gray-600">Unavailable</span>
+        <>
+          <span className="mt-3 text-[13px] font-medium text-gray-600">Unavailable</span>
+          <CardAction label="Request" />
+        </>
       );
-    statusLabel = status === "not_connected" ? "available" : `unavailable. ${DISABLED_HINT}`;
+    statusLabel = status === "not_connected" ? "available" : "unavailable, request access";
   } else if (status === "not_connected") {
     statusNode = (
       <>
@@ -346,24 +346,10 @@ const IntegrationCard: React.FC<{ item: Integration; onSelect: () => void }> = (
   }
 
   const body = (
-    <CardBody item={item} className={inactive ? "grayscale opacity-50" : ""}>
+    <CardBody item={item} className="">
       {statusNode}
     </CardBody>
   );
-
-  if (inactive) {
-    return (
-      <div
-        role="group"
-        aria-disabled="true"
-        aria-label={`${item.name}, ${statusLabel}`}
-        title={DISABLED_HINT}
-        className={`${cardBase} cursor-not-allowed`}
-      >
-        {body}
-      </div>
-    );
-  }
 
   return (
     <button
