@@ -32,6 +32,9 @@ const {
   ADMIN_API_KEY,
   // Serve Swagger UI at /api/docs in production too (always on outside production)
   ENABLE_API_DOCS,
+  // Sales demo: opening the app with ?code=<DEMO_CODE> starts a session for the "demo" customer
+  // without Genesis. Defaults to "demo" in every environment; set DEMO_CODE=off to disable it.
+  DEMO_CODE,
   EMBEDKIT_SERVER_BASE,
   API_URL,
   API_ACCOUNT_ID,
@@ -374,9 +377,38 @@ app.post('/api/code', strictLimiter, genesisAuth, (req, res) => {
   res.json({ code, ttlSec: Number(CODE_TTL_SEC) });
 });
 
+/* ------------ sales demo customer ------------ */
+const DEMO_LOGIN_CODE = DEMO_CODE === 'off' ? null : DEMO_CODE || 'demo';
+const DEMO_GENESIS_ID = 'demo';
+
+// Find or create the shared demo customer. It has a random Genesis token, so it can never
+// authenticate through Genesis; the demo code is the only way in.
+async function getDemoCustomer() {
+  let customer = await prisma.customer.findUnique({ where: { genesisId: DEMO_GENESIS_ID } });
+  if (!customer) {
+    try {
+      customer = await prisma.customer.create({
+        data: {
+          genesisId: DEMO_GENESIS_ID,
+          customerName: 'Demo (Sales)',
+          genesisAuthToken: crypto.randomBytes(32).toString('hex'),
+        },
+      });
+    } catch (err) {
+      // Two demo logins at the same time: the other request created it
+      if (err?.code !== 'P2002') throw err;
+      customer = await prisma.customer.findUnique({ where: { genesisId: DEMO_GENESIS_ID } });
+    }
+  }
+  await addMissingIntegrations(customer.id).catch((e) => console.warn('demo addMissingIntegrations failed:', e?.message || e));
+  return customer;
+}
+
 // Exchange code -> customer (shared by GET /?code= and POST /api/session/exchange)
 async function exchangeCode(code) {
   if (typeof code !== 'string' || !code) return null;
+  // Reusable (not single-use) so Sales can open the same link any number of times
+  if (DEMO_LOGIN_CODE && safeEqual(code, DEMO_LOGIN_CODE)) return getDemoCustomer();
   const entry = consumeCode(code);
   if (!entry) return null;
   return prisma.customer.findUnique({ where: { genesisId: entry.genesisId } });
@@ -673,4 +705,5 @@ app.listen(Number(PORT), () => {
   console.log(`API listening on :${PORT}`);
   console.log('Allowed origins:', [...ALLOW_ORIGINS].join(', ') || '(none)');
   console.log('Frame ancestors:', FRAME_ANCESTOR_LIST.join(', ') || '(self only)');
+  console.log('Demo login:', DEMO_LOGIN_CODE ? `?code=${DEMO_LOGIN_CODE}` : '(disabled)');
 });

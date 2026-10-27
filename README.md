@@ -130,6 +130,9 @@ JWT_SECRET=replace_with_a_random_secret
 ADMIN_API_KEY=replace_with_a_random_secret
 # Swagger UI at /api/docs (spec at /api/docs.json) is on outside production; set true to enable it in production
 # ENABLE_API_DOCS=true
+# Sales demo: open the app with ?code=demo to use the "demo" customer without Genesis.
+# On by default in every environment (code "demo"); set another value to change the code, or "off" to disable it.
+# DEMO_CODE=demo
 
 # CORS — must match the origin of the client you are running
 CORS_ORIGINS=http://localhost:5173
