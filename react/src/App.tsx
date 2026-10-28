@@ -12,6 +12,7 @@ import { Landing } from "./pages/Landing";
 import { Integration } from "./data/integrations";
 import { Detail } from "./pages/Detail";
 import { RequestLicense } from "./pages/RequestLicense";
+import { AdminApp } from "./admin/AdminApp";
 
 const AppShell: React.FC = () => {
   const [selectedApp, setSelectedApp] = useState<Integration | null>(null);
@@ -79,7 +80,13 @@ const App: React.FC = () => {
   // const { session } = useAuth()
   // const authed = Boolean(session)
   // return authed ? <AppShell /> : <Login />
-  return <AppShell />
+  return (
+    <Routes>
+      {/* Internal admin console (separate login), see src/admin */}
+      <Route path="/admin/*" element={<AdminApp />} />
+      <Route path="*" element={<AppShell />} />
+    </Routes>
+  )
 }
 
 export default App
