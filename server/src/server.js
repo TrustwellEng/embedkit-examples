@@ -10,7 +10,7 @@ import fetch from 'node-fetch';
 import { PrismaMssql } from '@prisma/adapter-mssql';
 import { PrismaClient } from '@prisma/client';
 import swaggerUi from 'swagger-ui-express';
-import { createCatalogRouter } from './controllers/catalogController.js';
+import { createAdminRouter } from './admin/routes.js';
 import { openapiSpec } from './docs/openapi.js';
 
 /* ------------ env ------------ */
@@ -28,7 +28,7 @@ const {
   CODE_TTL_SEC = '60',
   // Genesis GraphQL API used to validate x-genesis-auth-token
   GENESIS_API_URL = 'https://api-dev.trustwell.com/genesis',
-  // Shared secret for /api/admin/* (sent as `x-admin-key`). Admin routes are disabled when unset.
+  // Optional shared secret for scripts/Postman on /api/admin/* (sent as `x-admin-key`); the /admin UI uses admin sign-in
   ADMIN_API_KEY,
   // Serve Swagger UI at /api/docs in production too (always on outside production)
   ENABLE_API_DOCS,
@@ -575,7 +575,8 @@ app.post('/api/credentials/:integrationId', requireSession, requireIntegration, 
     });
 
     if (existing) {
-      await prisma.connectionCredential.update({ where: { id: existing.id }, data: { configPayload } });
+      // Customer/system writes clear modifiedBy (it only names an admin when an admin made the change)
+      await prisma.connectionCredential.update({ where: { id: existing.id }, data: { configPayload, modifiedBy: null } });
     } else {
       await prisma.connectionCredential.create({
         data: { customerId: req.customer.id, integrationId, configPayload },
@@ -584,7 +585,7 @@ app.post('/api/credentials/:integrationId', requireSession, requireIntegration, 
 
     await prisma.customerIntegration.update({
       where: { customerId_integrationId: { customerId: req.customer.id, integrationId } },
-      data: { isConfigured: true },
+      data: { isConfigured: true, modifiedBy: null },
     });
 
     res.json({ success: true, message: 'Credentials saved successfully' });
@@ -627,7 +628,7 @@ function configPayloadRoutes(path, model, label) {
     try {
       await model.upsert({
         where: { customerId_integrationId: { customerId: req.customer.id, integrationId } },
-        update: { configPayload },
+        update: { configPayload, modifiedBy: null },
         create: { customerId: req.customer.id, integrationId, configPayload },
       });
       res.json({ success: true, message: `${label} saved successfully` });
@@ -690,15 +691,20 @@ app.post('/api/slack/:integrationId/test-message', strictLimiter, requireSession
   }
 });
 
-/* ------------ admin: integrations catalog CRUD (x-admin-key) ------------ */
-function requireAdmin(req, res, next) {
-  if (!ADMIN_API_KEY) return res.status(503).json({ error: 'admin_disabled' });
-  const key = req.headers['x-admin-key'];
-  if (!key || !safeEqual(key, ADMIN_API_KEY)) return res.status(401).json({ error: 'unauthorized' });
-  next();
-}
-
-app.use('/api/admin/catalog', requireAdmin, createCatalogRouter(prisma));
+/* ------------ admin console API (/admin UI): see src/admin ------------ */
+// Signed-in admin session (cookie `admin_sid` or Bearer), or the x-admin-key shared secret for scripts
+app.use(
+  '/api/admin',
+  createAdminRouter({
+    prisma,
+    secret: JWT_SECRET,
+    adminApiKey: ADMIN_API_KEY,
+    safeEqual,
+    cookieOptions,
+    strictLimiter,
+    validateGenesisToken,
+  })
+);
 
 /* ------------ start ------------ */
 app.listen(Number(PORT), () => {

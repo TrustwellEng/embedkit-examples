@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Navigate, NavLink, Outlet, Route, Routes, useNavigate } from "react-router-dom";
-import { AdminUser, auth } from "./api";
+import { AdminUser, auth, setUnauthorizedHandler } from "./api";
 import { LoginPage } from "./pages/LoginPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { UsersPage } from "./pages/UsersPage";
@@ -62,7 +62,7 @@ const AdminLayout: React.FC = () => {
   if (user?.mustChangePassword) return <AccountPage forced />;
 
   return (
-    <div className="min-h-screen bg-gray-50 md:grid md:grid-cols-[240px_minmax(0,1fr)]">
+    <div className="min-h-screen bg-gray-50 text-gray-900 md:grid md:grid-cols-[240px_minmax(0,1fr)]">
       <aside className="bg-white border-b md:border-b-0 md:border-r border-gray-200 md:min-h-screen flex md:flex-col">
         <div className="px-5 py-5 hidden md:block">
           <p className="text-[16px] font-bold text-gray-950">Trustwell Admin</p>
@@ -126,6 +126,15 @@ export const AdminApp: React.FC = () => {
       () => setReady(true)
     );
   }, []);
+
+  // Session expired or revoked (deactivated, password reset) -> back to sign-in
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      setUser(null);
+      navigate("/admin/login", { replace: true });
+    });
+    return () => setUnauthorizedHandler(null);
+  }, [navigate]);
 
   useIdleLogout(!!user, logout);
 

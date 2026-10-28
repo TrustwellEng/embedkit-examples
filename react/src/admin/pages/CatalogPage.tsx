@@ -3,6 +3,7 @@ import { CatalogItem, catalogApi } from "../api";
 import {
   Badge,
   Card,
+  ChangedBy,
   ErrorText,
   Field,
   inputClass,
@@ -144,6 +145,7 @@ export const CatalogPage: React.FC = () => {
     setData((rows) => rows?.map((r) => (r.id === item.id ? { ...r, ...change } : r)) ?? rows);
     try {
       await catalogApi.update(item.id, change);
+      reload();
     } catch (err: any) {
       setRowError(err?.message || "Failed to update.");
       reload();
@@ -154,7 +156,7 @@ export const CatalogPage: React.FC = () => {
     <>
       <PageHeader
         title="Integrations catalog"
-        description="Every integration offered to customers. Turning one off hides it for all customers."
+        description={'Every integration offered to customers. "Shown to customers" hides or shows it for all customers at once; to turn one off for a single customer, use "Enabled" on that customer.'}
         actions={
           <button type="button" onClick={() => setEditing(null)} className={primaryButtonClass}>
             + Add integration
@@ -166,7 +168,7 @@ export const CatalogPage: React.FC = () => {
         {rowError && <p className="px-4 pt-3 text-[13px] text-red-600">{rowError}</p>}
         <LoadState loading={loading && !data} error={error} empty={data?.length === 0} />
         {data && data.length > 0 && (
-          <Table head={["Integration", "ID", "Category", "Tier", "Coming soon", "Active", ""]}>
+          <Table head={["Integration", "ID", "Category", "Tier", "Coming soon", "Shown to customers", "Last changed", ""]}>
             {data.map((item) => (
               <tr key={item.id} className={item.isGlobalActive ? "" : "bg-gray-50"}>
                 <Td>
@@ -186,7 +188,10 @@ export const CatalogPage: React.FC = () => {
                   <Toggle checked={item.isComingSoon} onChange={(v) => patch(item, { isComingSoon: v })} label={`${item.name} coming soon`} />
                 </Td>
                 <Td>
-                  <Toggle checked={item.isGlobalActive} onChange={(v) => patch(item, { isGlobalActive: v })} label={`${item.name} active`} />
+                  <Toggle checked={item.isGlobalActive} onChange={(v) => patch(item, { isGlobalActive: v })} label={`Show ${item.name} to all customers`} />
+                </Td>
+                <Td>
+                  <ChangedBy at={item.modifiedAt} by={item.modifiedByEmail} />
                 </Td>
                 <Td className="text-right">
                   <button type="button" onClick={() => setEditing(item)} className={smallButtonClass}>

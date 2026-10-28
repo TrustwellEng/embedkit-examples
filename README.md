@@ -126,7 +126,7 @@ NODE_ENV=development
 
 # Auth
 JWT_SECRET=replace_with_a_random_secret
-# Enables /api/admin/catalog (send as `x-admin-key` header); admin routes are off when unset
+# Optional: shared secret for scripts/Postman on /api/admin/* (send as `x-admin-key`; changes are stamped as system)
 ADMIN_API_KEY=replace_with_a_random_secret
 # Swagger UI at /api/docs (spec at /api/docs.json) is on outside production; set true to enable it in production
 # ENABLE_API_DOCS=true
@@ -171,6 +171,24 @@ npm run dev
 ```
 
 The server starts on `http://localhost:8080`.
+
+### Admin console (`/admin`)
+
+Internal console for Trustwell staff: customers and their Genesis token, per-customer integrations,
+the integrations catalog, admin users and the audit log. Every signed-in admin has full access.
+API: `server/src/admin` (mounted at `/api/admin`), UI: `react/src/admin`.
+
+1. Update the database once (safe to re-run): run `server/prisma/sql/2026-10-28_admin_console.sql`
+   in SSMS / Azure Data Studio / `sqlcmd -i`. It adds the `AdminUser` and `AdminAuditLog` tables and
+   `createdAt/createdBy/modifiedAt/modifiedBy` on every table (`*Credential.updatedAt` is renamed to `modifiedAt`).
+   The script also creates the first admin: `tduong@trustwell.com` / `Admin123@`.
+2. `npx prisma generate`, then restart the server.
+3. Open `http://localhost:5173/admin` and sign in. More admins are added from the Admin users page.
+
+`createdBy` / `modifiedBy` hold the `AdminUser.id` of the admin who made the change. They are `NULL` for
+changes made by the system or by customers (wizard), and for data that existed before the script.
+Sign-in locks an account for 15 minutes after 5 wrong passwords; resetting a password or deactivating
+a user signs them out everywhere.
 
 ---
 

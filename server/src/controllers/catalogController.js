@@ -1,7 +1,8 @@
 import express from 'express';
 
 // Admin CRUD for the global IntegrationsCatalog table.
-// Mount behind admin auth: app.use('/api/admin/catalog', requireAdmin, createCatalogRouter(prisma))
+// Mounted by the admin router (src/admin/routes.js) at /api/admin/catalog, behind admin auth.
+// Writes are stamped with the signed-in admin (createdBy/modifiedBy) and written to the audit log.
 
 const CATALOG_ID_RE = /^[A-Za-z0-9_-]{1,50}$/;
 // field -> { max length, required on create, nullable }
@@ -40,12 +41,14 @@ function parseCatalogBody(body, { partial }) {
   return { data };
 }
 
-export function createCatalogRouter(prisma) {
+export function createCatalogRouter(prisma, { audit, actorId, actorEmails }) {
   const router = express.Router();
 
   router.get('/', async (_req, res) => {
     try {
-      res.json(await prisma.integrationsCatalog.findMany({ orderBy: { name: 'asc' } }));
+      const items = await prisma.integrationsCatalog.findMany({ orderBy: { name: 'asc' } });
+      const emails = await actorEmails(items.flatMap((i) => [i.createdBy, i.modifiedBy]));
+      res.json(items.map((i) => ({ ...i, createdByEmail: emails[i.createdBy] ?? null, modifiedByEmail: emails[i.modifiedBy] ?? null })));
     } catch (error) {
       console.error('Failed to list catalog:', error);
       res.status(500).json({ error: 'Failed to list catalog' });
@@ -76,16 +79,18 @@ export function createCatalogRouter(prisma) {
       return res.status(400).json({ error: 'enableForCustomers must be a boolean' });
     }
 
+    const by = actorId(req);
     try {
       // Create the catalog item and give it to every existing customer in one transaction
       const [item, customersAdded] = await prisma.$transaction(async (tx) => {
-        const created = await tx.integrationsCatalog.create({ data: { id, ...data } });
+        const created = await tx.integrationsCatalog.create({ data: { id, ...data, createdBy: by, modifiedBy: by } });
         const added = await tx.$executeRaw`
-          INSERT INTO CustomerIntegration (customerId, integrationId, isEnabled, isConfigured)
-          SELECT c.id, ${id}, ${enableForCustomers}, 0
+          INSERT INTO CustomerIntegration (customerId, integrationId, isEnabled, isConfigured, createdBy, modifiedBy)
+          SELECT c.id, ${id}, ${enableForCustomers}, 0, ${by}, ${by}
           FROM Customer c`;
         return [created, added];
       });
+      await audit(req, 'catalog_created', { detail: `${id} (${customersAdded} customers, ${enableForCustomers ? 'enabled' : 'disabled'})` });
       res.status(201).json({ ...item, customersAdded });
     } catch (err) {
       if (err?.code === 'P2002') return res.status(409).json({ error: 'id_already_exists' });
@@ -100,7 +105,9 @@ export function createCatalogRouter(prisma) {
     if (!Object.keys(data).length) return res.status(400).json({ error: 'No fields to update' });
 
     try {
-      const item = await prisma.integrationsCatalog.update({ where: { id: req.params.id }, data });
+      const item = await prisma.integrationsCatalog.update({ where: { id: req.params.id }, data: { ...data, modifiedBy: actorId(req) } });
+      const changes = Object.entries(data).map(([k, v]) => `${k}=${v}`).join(', ');
+      await audit(req, 'catalog_updated', { detail: `${req.params.id}: ${changes}` });
       res.json(item);
     } catch (err) {
       if (err?.code === 'P2025') return res.status(404).json({ error: 'not_found' });
@@ -127,6 +134,7 @@ export function createCatalogRouter(prisma) {
         });
       }
       await prisma.integrationsCatalog.delete({ where: { id } });
+      await audit(req, 'catalog_deleted', { detail: id });
       res.status(204).end();
     } catch (err) {
       if (err?.code === 'P2025') return res.status(404).json({ error: 'not_found' });

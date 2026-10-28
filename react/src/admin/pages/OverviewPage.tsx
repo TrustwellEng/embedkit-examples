@@ -38,7 +38,7 @@ export const OverviewPage: React.FC = () => {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <Stat label="Customers" value={customers.length} to="/admin/customers" />
         <Stat label="Admin users" value={users.filter((u) => u.isActive).length} to="/admin/users" />
-        <Stat label="Active integrations" value={`${catalog.filter((c) => c.isGlobalActive).length} of ${catalog.length}`} to="/admin/catalog" />
+        <Stat label="Integrations shown to customers" value={`${catalog.filter((c) => c.isGlobalActive).length} of ${catalog.length}`} to="/admin/catalog" />
         <Stat label="Failed sign-ins (24h)" value={failed24h} to="/admin/audit" tone={failed24h ? "amber" : undefined} />
       </div>
 

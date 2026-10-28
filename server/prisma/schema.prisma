@@ -7,11 +7,14 @@ datasource db {
 }
 
 model Customer {
-  id               String   @id @default(uuid()) @db.UniqueIdentifier
-  genesisId        String   @unique @db.VarChar(100)
-  genesisAuthToken String   @db.VarChar(255)
-  customerName     String?  @db.NVarChar(255)
-  createdAt        DateTime @default(now())
+  id               String    @id @default(uuid()) @db.UniqueIdentifier
+  genesisId        String    @unique @db.VarChar(100)
+  genesisAuthToken String    @db.VarChar(255)
+  customerName     String?   @db.NVarChar(255)
+  createdAt        DateTime  @default(now())
+  createdBy        String?   @db.UniqueIdentifier
+  modifiedAt       DateTime? @updatedAt
+  modifiedBy       String?   @db.UniqueIdentifier
 
   integrations CustomerIntegration[]
   credentials  ConnectionCredential[]
@@ -28,6 +31,12 @@ model IntegrationsCatalog {
   isGlobalActive Boolean @default(true)
   // Planned but not released: shown with a "Coming soon" ribbon, cannot be opened
   isComingSoon   Boolean @default(false)
+
+  // Stamps (see prisma/sql/2026-10-28_admin_console.sql). *By = AdminUser.id, null = system/customer/old data
+  createdAt  DateTime? @default(now())
+  createdBy  String?   @db.UniqueIdentifier
+  modifiedAt DateTime? @updatedAt
+  modifiedBy String?   @db.UniqueIdentifier
 
   customers   CustomerIntegration[]
   sourceInfos IntegrationSourceInfo[]
@@ -47,6 +56,12 @@ model IntegrationSourceInfo {
   badge         String? @db.NVarChar(50)
   isActive      Boolean @default(true)
 
+  // Stamps (see prisma/sql/2026-10-28_admin_console.sql). *By = AdminUser.id, null = system/customer/old data
+  createdAt  DateTime? @default(now())
+  createdBy  String?   @db.UniqueIdentifier
+  modifiedAt DateTime? @updatedAt
+  modifiedBy String?   @db.UniqueIdentifier
+
   integration IntegrationsCatalog @relation(fields: [integrationId], references: [id])
 
   @@id([integrationId, source])
@@ -58,6 +73,12 @@ model CustomerIntegration {
   isEnabled     Boolean @default(false)
   isConfigured  Boolean @default(false)
 
+  // Stamps (see prisma/sql/2026-10-28_admin_console.sql). *By = AdminUser.id, null = system/customer/old data
+  createdAt  DateTime? @default(now())
+  createdBy  String?   @db.UniqueIdentifier
+  modifiedAt DateTime? @updatedAt
+  modifiedBy String?   @db.UniqueIdentifier
+
   customer    Customer            @relation(fields: [customerId], references: [id])
   integration IntegrationsCatalog @relation(fields: [integrationId], references: [id])
 
@@ -65,11 +86,14 @@ model CustomerIntegration {
 }
 
 model ConnectionCredential {
-  id            String   @id @default(uuid()) @db.UniqueIdentifier
-  customerId    String   @db.UniqueIdentifier
-  integrationId String   @db.VarChar(50)
-  configPayload String   @db.NVarChar(Max)
-  updatedAt     DateTime @updatedAt
+  id            String    @id @default(uuid()) @db.UniqueIdentifier
+  customerId    String    @db.UniqueIdentifier
+  integrationId String    @db.VarChar(50)
+  configPayload String    @db.NVarChar(Max)
+  createdAt     DateTime? @default(now())
+  createdBy     String?   @db.UniqueIdentifier
+  modifiedAt    DateTime? @updatedAt
+  modifiedBy    String?   @db.UniqueIdentifier
 
   customer    Customer            @relation(fields: [customerId], references: [id])
   integration IntegrationsCatalog @relation(fields: [integrationId], references: [id])
@@ -77,11 +101,14 @@ model ConnectionCredential {
 
 // Wizard step 3: data sync settings (JSON, same shape as ConnectionCredential)
 model DataSyncCredential {
-  id            String   @id @default(uuid()) @db.UniqueIdentifier
-  customerId    String   @db.UniqueIdentifier
-  integrationId String   @db.VarChar(50)
-  configPayload String   @db.NVarChar(Max)
-  updatedAt     DateTime @updatedAt
+  id            String    @id @default(uuid()) @db.UniqueIdentifier
+  customerId    String    @db.UniqueIdentifier
+  integrationId String    @db.VarChar(50)
+  configPayload String    @db.NVarChar(Max)
+  createdAt     DateTime? @default(now())
+  createdBy     String?   @db.UniqueIdentifier
+  modifiedAt    DateTime? @updatedAt
+  modifiedBy    String?   @db.UniqueIdentifier
 
   customer    Customer            @relation(fields: [customerId], references: [id])
   integration IntegrationsCatalog @relation(fields: [integrationId], references: [id])
@@ -91,14 +118,48 @@ model DataSyncCredential {
 
 // Wizard step 4: schedule settings (JSON, same shape as ConnectionCredential)
 model ScheduleCredential {
-  id            String   @id @default(uuid()) @db.UniqueIdentifier
-  customerId    String   @db.UniqueIdentifier
-  integrationId String   @db.VarChar(50)
-  configPayload String   @db.NVarChar(Max)
-  updatedAt     DateTime @updatedAt
+  id            String    @id @default(uuid()) @db.UniqueIdentifier
+  customerId    String    @db.UniqueIdentifier
+  integrationId String    @db.VarChar(50)
+  configPayload String    @db.NVarChar(Max)
+  createdAt     DateTime? @default(now())
+  createdBy     String?   @db.UniqueIdentifier
+  modifiedAt    DateTime? @updatedAt
+  modifiedBy    String?   @db.UniqueIdentifier
 
   customer    Customer            @relation(fields: [customerId], references: [id])
   integration IntegrationsCatalog @relation(fields: [integrationId], references: [id])
 
   @@unique([customerId, integrationId])
+}
+
+// Console users (/admin). Every active admin has full access.
+model AdminUser {
+  id                 String    @id @default(uuid()) @db.UniqueIdentifier
+  email              String    @unique @db.NVarChar(256)
+  passwordHash       String    @db.NVarChar(255)
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(true)
+  failedLoginCount   Int       @default(0)
+  lockoutEnd         DateTime?
+  lastLoginAt        DateTime?
+  // Sessions issued before this are rejected
+  passwordChangedAt  DateTime?
+  createdAt          DateTime? @default(now())
+  createdBy          String?   @db.UniqueIdentifier
+  modifiedAt         DateTime? @updatedAt
+  modifiedBy         String?   @db.UniqueIdentifier
+}
+
+// Append-only log of admin sign-ins and changes. createdBy = AdminUser.id (null for unknown emails / system)
+model AdminAuditLog {
+  id        BigInt   @id @default(autoincrement())
+  action    String   @db.NVarChar(50)
+  email     String?  @db.NVarChar(256)
+  detail    String?  @db.NVarChar(500)
+  ip        String?  @db.NVarChar(45)
+  createdAt DateTime @default(now())
+  createdBy String?  @db.UniqueIdentifier
+
+  @@index([createdAt(sort: Desc)])
 }

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { auth, MFA_ENABLED } from "../api";
+import { auth } from "../api";
 import { useAdminAuth } from "../AdminApp";
 import { ErrorText, Field, inputClass, primaryButtonClass, secondaryButtonClass } from "../ui";
 
@@ -117,7 +117,7 @@ export const LoginPage: React.FC = () => {
 
         {import.meta.env.DEV && (
           <p className="mt-6 text-[12px] text-gray-500 border-t border-gray-100 pt-4">
-            Mock: admin@trustwell.com / Admin@123{MFA_ENABLED && ", MFA code 123456"}. ops@trustwell.com must change password on first sign-in.
+            First admin is created by server/prisma/sql/2026-10-28_admin_console.sql.
           </p>
         )}
       </div>

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { customersApi } from "../api";
-import { Card, formatDate, inputClass, LoadState, PageHeader, Td, Table, useAsync } from "../ui";
+import { Card, ChangedBy, inputClass, LoadState, PageHeader, Td, Table, useAsync } from "../ui";
 
 export const CustomersPage: React.FC = () => {
   const { data, loading, error } = useAsync(() => customersApi.list());
@@ -35,7 +35,7 @@ export const CustomersPage: React.FC = () => {
       <Card>
         <LoadState loading={loading} error={error} empty={!rows.length} emptyText="No customers match." />
         {!loading && !error && rows.length > 0 && (
-          <Table head={["Customer", "Genesis ID", "Token", "Token updated", "Integrations", ""]}>
+          <Table head={["Customer", "Genesis ID", "Token", "Last changed", "Integrations", ""]}>
             {rows.map((c) => (
               <tr key={c.id} className="hover:bg-gray-50">
                 <Td className="font-medium text-gray-950">{c.customerName || <span className="text-gray-500">Unnamed</span>}</Td>
@@ -43,7 +43,9 @@ export const CustomersPage: React.FC = () => {
                 <Td>
                   <span className="font-mono text-[12px] text-gray-500">••••{c.tokenPreview}</span>
                 </Td>
-                <Td className="whitespace-nowrap">{formatDate(c.tokenUpdatedAt)}</Td>
+                <Td>
+                  <ChangedBy at={c.modifiedAt ?? c.createdAt} by={c.modifiedByEmail} />
+                </Td>
                 <Td className="whitespace-nowrap text-gray-700">
                   {c.enabledCount} enabled · {c.configuredCount} connected
                 </Td>

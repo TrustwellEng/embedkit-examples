@@ -4,6 +4,7 @@ import { Customer, customersApi } from "../api";
 import {
   Badge,
   Card,
+  ChangedBy,
   ErrorText,
   Field,
   formatDate,
@@ -87,6 +88,7 @@ export const CustomerDetailPage: React.FC = () => {
     try {
       await customersApi.setIntegrationEnabled(id, integrationId, isEnabled);
       customer.reload();
+      integrations.reload();
     } catch (err: any) {
       setToggleError(err?.message || "Failed to update integration.");
       integrations.reload();
@@ -109,7 +111,9 @@ export const CustomerDetailPage: React.FC = () => {
             <h2 className="text-[15px] font-bold text-gray-950 mb-2">Genesis auth token</h2>
             <div className="flex flex-wrap items-center gap-3 text-[14px] text-gray-700">
               <span className="font-mono text-[13px]">••••••••{c.tokenPreview}</span>
-              <span className="text-gray-500">Updated {formatDate(c.tokenUpdatedAt)}</span>
+              <span className="text-gray-500">
+                Last changed {formatDate(c.modifiedAt ?? c.createdAt)} {c.modifiedByEmail ? `by ${c.modifiedByEmail}` : "by system"}
+              </span>
             </div>
           </div>
           <button type="button" onClick={() => setEditingToken(true)} className={primaryButtonClass}>
@@ -128,7 +132,7 @@ export const CustomerDetailPage: React.FC = () => {
         {toggleError && <p className="px-4 pt-3 text-[13px] text-red-600">{toggleError}</p>}
         <LoadState loading={integrations.loading && !integrations.data} error={integrations.error} />
         {integrations.data && (
-          <Table head={["Integration", "Tier", "Connection", "Credentials updated", "Enabled"]}>
+          <Table head={["Integration", "Tier", "Connection", "Credentials updated", "Last changed", "Enabled"]}>
             {integrations.data.map((r) => (
               <tr key={r.integrationId}>
                 <Td>
@@ -139,11 +143,16 @@ export const CustomerDetailPage: React.FC = () => {
                       <span className="w-6 h-6 rounded bg-gray-100" aria-hidden="true" />
                     )}
                     <span className="font-medium text-gray-950">{r.name}</span>
+                    {!r.isGlobalActive && <Badge tone="gray">Hidden for all customers</Badge>}
+                    {r.isComingSoon && <Badge tone="amber">Coming soon</Badge>}
                   </div>
                 </Td>
                 <Td>{r.badge ? <Badge tone={r.badge === "Premium" ? "indigo" : "gray"}>{r.badge}</Badge> : "—"}</Td>
                 <Td>{r.isConfigured ? <Badge tone="green">Connected</Badge> : <span className="text-gray-500">Not connected</span>}</Td>
-                <Td className="whitespace-nowrap">{formatDate(r.credentialUpdatedAt)}</Td>
+                <Td className="whitespace-nowrap text-gray-700">{formatDate(r.credentialUpdatedAt)}</Td>
+                <Td>
+                  <ChangedBy at={r.modifiedAt} by={r.modifiedByEmail} />
+                </Td>
                 <Td>
                   <Toggle checked={r.isEnabled} onChange={(v) => toggle(r.integrationId, v)} label={`Enable ${r.name} for ${c.genesisId}`} />
                 </Td>

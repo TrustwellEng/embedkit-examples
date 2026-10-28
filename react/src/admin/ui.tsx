@@ -61,7 +61,7 @@ export const PageHeader: React.FC<{ title: string; description?: string; actions
 );
 
 export const Card: React.FC<React.PropsWithChildren<{ className?: string }>> = ({ className = "", children }) => (
-  <div className={`bg-white border border-gray-200 rounded-[12px] ${className}`}>{children}</div>
+  <div className={`bg-white text-gray-900 border border-gray-200 rounded-[12px] ${className}`}>{children}</div>
 );
 
 export const LoadState: React.FC<{ loading: boolean; error: string | null; empty?: boolean; emptyText?: string }> = ({
@@ -79,10 +79,18 @@ export const LoadState: React.FC<{ loading: boolean; error: string | null; empty
 export const ErrorText: React.FC<{ error: string | null }> = ({ error }) =>
   error ? <p className="text-[13px] text-red-600">{error}</p> : null;
 
+/* "date" + "by email" for the created/modified stamps; no email = system, customer or old data */
+export const ChangedBy: React.FC<{ at: string | null | undefined; by: string | null | undefined }> = ({ at, by }) => (
+  <div className="whitespace-nowrap">
+    <div className="text-gray-700">{formatDate(at ?? null)}</div>
+    <div className="text-[12px] text-gray-500">{by ? `by ${by}` : at ? "by system" : ""}</div>
+  </div>
+);
+
 /* ------------ table ------------ */
 export const Table: React.FC<React.PropsWithChildren<{ head: string[] }>> = ({ head, children }) => (
   <div className="overflow-x-auto">
-    <table className="w-full text-left text-[14px]">
+    <table className="w-full text-left text-[14px] text-gray-900">
       <thead className="bg-gray-50 text-[12px] uppercase tracking-wide text-gray-600">
         <tr>
           {head.map((h) => (
@@ -155,7 +163,7 @@ export const Modal: React.FC<React.PropsWithChildren<{ title: string; onClose: (
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-lg bg-white rounded-[12px] shadow-xl p-6"
+        className="w-full max-w-lg bg-white text-gray-900 rounded-[12px] shadow-xl p-6"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-4">

@@ -10,9 +10,11 @@ const ACTIONS: { value: AuditAction; label: string; tone: "green" | "red" | "gra
   { value: "user_updated", label: "User updated", tone: "indigo" },
   { value: "password_reset", label: "Password reset", tone: "amber" },
   { value: "token_updated", label: "Token updated", tone: "amber" },
+  { value: "token_rejected", label: "Token rejected", tone: "red" },
   { value: "integration_toggled", label: "Integration toggled", tone: "indigo" },
   { value: "catalog_created", label: "Catalog added", tone: "indigo" },
   { value: "catalog_updated", label: "Catalog updated", tone: "indigo" },
+  { value: "catalog_deleted", label: "Catalog deleted", tone: "red" },
 ];
 const ACTION_META = ACTIONS.reduce<Partial<Record<AuditAction, (typeof ACTIONS)[number]>>>((m, a) => ({ ...m, [a.value]: a }), {});
 
@@ -27,7 +29,7 @@ export const AuditPage: React.FC = () => {
     if (!data) return;
     const csv = toCsv([
       ["Time", "User", "Action", "Detail", "IP"],
-      ...data.map((a) => [a.createdAt, a.email ?? "", a.action, a.detail ?? "", a.ip]),
+      ...data.map((a) => [a.createdAt, a.email ?? "", a.action, a.detail ?? "", a.ip ?? ""]),
     ]);
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     const link = Object.assign(document.createElement("a"), { href: url, download: "audit-log.csv" });

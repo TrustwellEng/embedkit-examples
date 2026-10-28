@@ -4,6 +4,7 @@ import { useAdminAuth } from "../AdminApp";
 import {
   Badge,
   Card,
+  ChangedBy,
   dangerButtonClass,
   ErrorText,
   Field,
@@ -127,7 +128,7 @@ export const UsersPage: React.FC = () => {
         {actionError && <p className="px-4 pt-3 text-[13px] text-red-600">{actionError}</p>}
         <LoadState loading={loading && !data} error={error} empty={data?.length === 0} />
         {data && data.length > 0 && (
-          <Table head={["Email", "Status", ...(MFA_ENABLED ? ["MFA"] : []), "Failed sign-ins", "Last sign-in", "Created", "Actions"]}>
+          <Table head={["Email", "Status", ...(MFA_ENABLED ? ["MFA"] : []), "Failed sign-ins", "Last sign-in", "Created", "Last changed", "Actions"]}>
             {data.map((u) => {
               const busy = busyId === u.id;
               const self = u.id === me?.id;
@@ -143,7 +144,12 @@ export const UsersPage: React.FC = () => {
                   {MFA_ENABLED && <Td>{u.mfaEnabled ? <Badge tone="green">On</Badge> : <Badge tone="amber">Off</Badge>}</Td>}
                   <Td>{u.failedLoginCount}</Td>
                   <Td className="whitespace-nowrap">{formatDate(u.lastLoginAt)}</Td>
-                  <Td className="whitespace-nowrap">{formatDate(u.createdAt)}</Td>
+                  <Td>
+                    <ChangedBy at={u.createdAt} by={u.createdByEmail} />
+                  </Td>
+                  <Td>
+                    <ChangedBy at={u.modifiedAt} by={u.modifiedByEmail} />
+                  </Td>
                   <Td>
                     <div className="flex flex-wrap gap-2">
                       {isLocked(u) && (
