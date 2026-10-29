@@ -46,9 +46,9 @@ const UpdateTokenModal: React.FC<{ customer: Customer; onClose: () => void; onSa
     <Modal title={`Update token · ${customer.genesisId}`} onClose={onClose}>
       <form onSubmit={submit} className="space-y-5">
         <Field
-          label="New Genesis auth token"
+          label="New auth token"
           htmlFor="new-token"
-          hint="Validated with Genesis the same way as a customer sign-in. The current token is kept if validation fails."
+          hint="Validated the same way as a customer sign-in. The current token is kept if validation fails."
         >
           <input
             id="new-token"
@@ -103,12 +103,12 @@ export const CustomerDetailPage: React.FC = () => {
       <Link to="/admin/customers" className="inline-block text-[13px] font-medium text-gray-700 hover:text-[#4338CA] mb-4">
         ← Customers
       </Link>
-      <PageHeader title={c.customerName || c.genesisId} description={`Genesis ID ${c.genesisId} · created ${formatDate(c.createdAt)}`} />
+      <PageHeader title={c.customerName || c.genesisId} description={`Customer ID ${c.genesisId} · created ${formatDate(c.createdAt)}`} />
 
       <Card className="p-5 mb-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-[15px] font-bold text-gray-950 mb-2">Genesis auth token</h2>
+            <h2 className="text-[15px] font-bold text-gray-950 mb-2">Auth token</h2>
             <div className="flex flex-wrap items-center gap-3 text-[14px] text-gray-700">
               <span className="font-mono text-[13px]">••••••••{c.tokenPreview}</span>
               <span className="text-gray-500">

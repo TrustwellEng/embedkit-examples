@@ -18,13 +18,13 @@ export const CustomersPage: React.FC = () => {
     <>
       <PageHeader
         title="Customers & tokens"
-        description="Genesis customers, their auth token and how many integrations each one has enabled."
+        description="Customers, their auth token and how many integrations each one has enabled."
       />
 
       <div className="flex flex-wrap gap-3 mb-4">
         <input
           type="search"
-          placeholder="Search by name or Genesis ID"
+          placeholder="Search by name or customer ID"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className={`${inputClass} max-w-xs`}
@@ -35,7 +35,7 @@ export const CustomersPage: React.FC = () => {
       <Card>
         <LoadState loading={loading} error={error} empty={!rows.length} emptyText="No customers match." />
         {!loading && !error && rows.length > 0 && (
-          <Table head={["Customer", "Genesis ID", "Token", "Last changed", "Integrations", ""]}>
+          <Table head={["Customer", "Customer ID", "Token", "Last changed", "Integrations", ""]}>
             {rows.map((c) => (
               <tr key={c.id} className="hover:bg-gray-50">
                 <Td className="font-medium text-gray-950">{c.customerName || <span className="text-gray-500">Unnamed</span>}</Td>
