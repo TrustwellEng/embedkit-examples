@@ -97,7 +97,7 @@ export const openapiSpec = {
       },
       CatalogCreate: {
         type: 'object',
-        required: ['id', 'name', 'category'],
+        required: ['id', 'name'],
         properties: {
           id: { type: 'string', pattern: '^[A-Za-z0-9_-]{1,50}$', example: 'hubspot' },
           name: { type: 'string', maxLength: 100, example: 'HubSpot' },

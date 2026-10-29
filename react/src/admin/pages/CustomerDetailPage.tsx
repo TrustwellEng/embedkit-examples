@@ -1,10 +1,12 @@
 import React, { useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { Customer, customersApi } from "../api";
+import { Link, useLocation, useParams } from "react-router-dom";
+import { Customer, customersApi, PRODUCTS } from "../api";
 import {
   Badge,
   Card,
   ChangedBy,
+  IconButton,
+  RefreshIcon,
   ErrorText,
   Field,
   formatDate,
@@ -14,7 +16,6 @@ import {
   PageHeader,
   primaryButtonClass,
   secondaryButtonClass,
-  smallButtonClass,
   Td,
   Table,
   Toggle,
@@ -76,6 +77,7 @@ const UpdateTokenModal: React.FC<{ customer: Customer; onClose: () => void; onSa
 
 export const CustomerDetailPage: React.FC = () => {
   const { id = "" } = useParams();
+  const location = useLocation();
   const customer = useAsync(() => customersApi.get(id), [id]);
   const integrations = useAsync(() => customersApi.integrations(id), [id]);
   const [editingToken, setEditingToken] = useState(false);
@@ -100,10 +102,10 @@ export const CustomerDetailPage: React.FC = () => {
 
   return (
     <>
-      <Link to="/admin/customers" className="inline-block text-[13px] font-medium text-gray-700 hover:text-[#4338CA] mb-4">
+      <Link to={(location.state as { back?: string } | null)?.back ?? "/admin/customers"} className="inline-block text-[13px] font-medium text-gray-700 hover:text-[#4338CA] mb-4">
         ← Customers
       </Link>
-      <PageHeader title={c.customerName || c.genesisId} description={`Customer ID ${c.genesisId} · created ${formatDate(c.createdAt)}`} />
+      <PageHeader title={`Customer ${c.genesisId}`} description={`Created ${formatDate(c.createdAt)}`} />
 
       <Card className="p-5 mb-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -144,6 +146,12 @@ export const CustomerDetailPage: React.FC = () => {
                     )}
                     <span className="font-medium text-gray-950">{r.name}</span>
                     {!r.isGlobalActive && <Badge tone="gray">Hidden for all customers</Badge>}
+                    {r.isGlobalActive &&
+                      PRODUCTS.filter((p) => r.visibleIn?.[p.id] === false).map((p) => (
+                        <Badge key={p.id} tone="gray">
+                          Hidden in {p.label}
+                        </Badge>
+                      ))}
                     {r.isComingSoon && <Badge tone="amber">Coming soon</Badge>}
                   </div>
                 </Td>
@@ -161,9 +169,9 @@ export const CustomerDetailPage: React.FC = () => {
           </Table>
         )}
         <div className="px-4 py-3 border-t border-gray-100">
-          <button type="button" onClick={integrations.reload} className={smallButtonClass}>
-            Refresh
-          </button>
+          <IconButton label="Refresh" onClick={integrations.reload}>
+            <RefreshIcon />
+          </IconButton>
         </div>
       </Card>
 

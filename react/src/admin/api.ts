@@ -8,6 +8,14 @@ const STORAGE_KEY = "embedkit_admin_token";
 // Two-factor sign-in (TOTP). Off for now: hides every MFA control in the console (no server support yet).
 export const MFA_ENABLED = false;
 
+/* ------------ customer products ------------ */
+// Same codes as ?source= in the customer app and IntegrationSourceInfo.source
+export type Product = "GF" | "FLQ";
+export const PRODUCTS: { id: Product; label: string }[] = [
+  { id: "GF", label: "Genesis" },
+  { id: "FLQ", label: "FoodLogiQ" },
+];
+
 /* ------------ types (mirror the DB tables) ------------ */
 // *ByEmail = admin who made the change; null = system, customer, or data from before stamps existed
 interface Stamps {
@@ -63,11 +71,13 @@ export interface Customer extends Stamps {
 export interface CatalogItem extends Partial<Stamps> {
   id: string;
   name: string;
-  category: string;
+  category?: string; // not used by the console (no longer edited)
   iconUrl: string | null;
   badge: string | null;
   isGlobalActive: boolean;
   isComingSoon: boolean;
+  // Shown to that product's customers (on top of isGlobalActive)
+  visibleIn?: Record<Product, boolean>;
 }
 
 export interface CustomerIntegrationRow {
@@ -77,6 +87,7 @@ export interface CustomerIntegrationRow {
   iconUrl: string | null;
   isGlobalActive: boolean;
   isComingSoon: boolean;
+  visibleIn: Record<Product, boolean>;
   isEnabled: boolean;
   isConfigured: boolean;
   credentialUpdatedAt: string | null;
@@ -246,8 +257,19 @@ export const auditApi = {
 };
 
 /* ------------ customers ------------ */
+export const CUSTOMER_PAGE_SIZE = 30;
+
+export interface Page<T> {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export const customersApi = {
-  list: () => request<Customer[]>("/customers"),
+  // Server-side paging and search (customer ID contains q)
+  list: (page = 1, q = "") =>
+    request<Page<Customer>>(`/customers${qs({ page: String(page), pageSize: String(CUSTOMER_PAGE_SIZE), q: q.trim() })}`),
 
   get: (id: string) => request<Customer>(`/customers/${id}`),
 
@@ -264,10 +286,10 @@ export const customersApi = {
 };
 
 /* ------------ catalog ------------ */
-export type CatalogInput = Pick<CatalogItem, "id" | "name" | "category" | "iconUrl" | "badge"> &
+export type CatalogInput = Pick<CatalogItem, "id" | "name" | "iconUrl" | "badge"> &
   Partial<Pick<CatalogItem, "isGlobalActive" | "isComingSoon">> & { enableForCustomers?: boolean };
 
-type CatalogPatch = Partial<Pick<CatalogItem, "name" | "category" | "iconUrl" | "badge" | "isGlobalActive" | "isComingSoon">>;
+type CatalogPatch = Partial<Pick<CatalogItem, "name" | "iconUrl" | "badge" | "isGlobalActive" | "isComingSoon">>;
 
 export const catalogApi = {
   list: () => request<CatalogItem[]>("/catalog"),
@@ -277,4 +299,7 @@ export const catalogApi = {
 
   update: (id: string, patch: CatalogPatch) =>
     request<CatalogItem>(`/catalog/${encodeURIComponent(id)}`, { method: "PATCH", json: patch }),
+
+  setVisibility: (id: string, product: Product, visible: boolean) =>
+    request<{ ok: true }>(`/catalog/${encodeURIComponent(id)}/visibility/${product}`, { method: "PUT", json: { visible } }),
 };

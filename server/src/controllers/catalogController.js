@@ -5,10 +5,17 @@ import express from 'express';
 // Writes are stamped with the signed-in admin (createdBy/modifiedBy) and written to the audit log.
 
 const CATALOG_ID_RE = /^[A-Za-z0-9_-]{1,50}$/;
+// Customer products. Visibility per product lives in IntegrationSourceInfo.isActive (no row = shown).
+const PRODUCTS = ['GF', 'FLQ'];
+
+// { GF: true, FLQ: false } from an item's IntegrationSourceInfo rows
+const visibilityOf = (sourceInfos = []) =>
+  Object.fromEntries(PRODUCTS.map((p) => [p, sourceInfos.find((s) => s.source === p)?.isActive ?? true]));
 // field -> { max length, required on create, nullable }
 const CATALOG_FIELDS = {
   name: { max: 100, required: true },
-  category: { max: 50, required: true },
+  // Optional: the admin console no longer sets it. The column is NOT NULL, so create defaults it to ''
+  category: { max: 50 },
   iconUrl: { max: 500, nullable: true },
   badge: { max: 50, nullable: true },
 };
@@ -17,6 +24,8 @@ const CATALOG_FIELDS = {
 function parseCatalogBody(body, { partial }) {
   if (!body || typeof body !== 'object') return { error: 'Body must be a JSON object' };
   const data = {};
+
+  if (!partial && body.category === undefined) data.category = '';
 
   for (const [field, rule] of Object.entries(CATALOG_FIELDS)) {
     const value = body[field];
@@ -41,14 +50,26 @@ function parseCatalogBody(body, { partial }) {
   return { data };
 }
 
+export { PRODUCTS, visibilityOf };
+
 export function createCatalogRouter(prisma, { audit, actorId, actorEmails }) {
   const router = express.Router();
 
   router.get('/', async (_req, res) => {
     try {
-      const items = await prisma.integrationsCatalog.findMany({ orderBy: { name: 'asc' } });
+      const items = await prisma.integrationsCatalog.findMany({
+        orderBy: { name: 'asc' },
+        include: { sourceInfos: { select: { source: true, isActive: true } } },
+      });
       const emails = await actorEmails(items.flatMap((i) => [i.createdBy, i.modifiedBy]));
-      res.json(items.map((i) => ({ ...i, createdByEmail: emails[i.createdBy] ?? null, modifiedByEmail: emails[i.modifiedBy] ?? null })));
+      res.json(
+        items.map(({ sourceInfos, ...i }) => ({
+          ...i,
+          visibleIn: visibilityOf(sourceInfos),
+          createdByEmail: emails[i.createdBy] ?? null,
+          modifiedByEmail: emails[i.modifiedBy] ?? null,
+        }))
+      );
     } catch (error) {
       console.error('Failed to list catalog:', error);
       res.status(500).json({ error: 'Failed to list catalog' });
@@ -116,6 +137,32 @@ export function createCatalogRouter(prisma, { audit, actorId, actorEmails }) {
     }
   });
 
+  // Show/hide for one customer product (GF = Genesis, FLQ = FoodLogiQ). Uses the existing
+  // IntegrationSourceInfo row (display overrides are kept) or creates one with only isActive set.
+  router.put('/:id/visibility/:product', async (req, res) => {
+    const { id } = req.params;
+    const product = String(req.params.product).toUpperCase();
+    const { visible } = req.body ?? {};
+    if (!PRODUCTS.includes(product)) return res.status(400).json({ error: 'invalid_product' });
+    if (typeof visible !== 'boolean') return res.status(400).json({ error: 'visible must be a boolean' });
+
+    try {
+      const item = await prisma.integrationsCatalog.findUnique({ where: { id }, select: { id: true } });
+      if (!item) return res.status(404).json({ error: 'not_found' });
+      const by = actorId(req);
+      await prisma.integrationSourceInfo.upsert({
+        where: { integrationId_source: { integrationId: id, source: product } },
+        update: { isActive: visible, modifiedBy: by },
+        create: { integrationId: id, source: product, isActive: visible, createdBy: by, modifiedBy: by },
+      });
+      await audit(req, 'catalog_updated', { detail: `${id}: ${product} ${visible ? 'shown' : 'hidden'}` });
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('Failed to update catalog visibility:', err);
+      res.status(500).json({ error: 'Failed to update catalog visibility' });
+    }
+  });
+
   // Hard delete only when no customer uses it; otherwise set isGlobalActive=false instead.
   router.delete('/:id', async (req, res) => {
     const { id } = req.params;
@@ -133,7 +180,11 @@ export function createCatalogRouter(prisma, { audit, actorId, actorEmails }) {
           detail: `Referenced by ${customers} customer integration(s) and ${credentials} credential(s). Set isGlobalActive=false to hide it instead.`,
         });
       }
-      await prisma.integrationsCatalog.delete({ where: { id } });
+      // Per-product visibility rows belong to the item, so they go with it
+      await prisma.$transaction([
+        prisma.integrationSourceInfo.deleteMany({ where: { integrationId: id } }),
+        prisma.integrationsCatalog.delete({ where: { id } }),
+      ]);
       await audit(req, 'catalog_deleted', { detail: id });
       res.status(204).end();
     } catch (err) {

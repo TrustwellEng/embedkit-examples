@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { Navigate, NavLink, Outlet, Route, Routes, useNavigate } from "react-router-dom";
+import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { AdminUser, auth, setUnauthorizedHandler } from "./api";
 import { LoginPage } from "./pages/LoginPage";
 import { OverviewPage } from "./pages/OverviewPage";
@@ -55,36 +55,104 @@ const NAV = [
   { to: "/admin/account", label: "My account" },
 ];
 
+const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+  `px-3 py-2 rounded-[6px] text-[14px] whitespace-nowrap transition-colors ${
+    isActive ? "bg-[#EEF2FF] text-[#3730A3] font-semibold" : "text-gray-700 hover:bg-gray-100"
+  }`;
+
+// onNavigate: also called when tapping the page you're already on (the URL doesn't change then)
+const NavLinks: React.FC<{ onNavigate?: () => void }> = ({ onNavigate }) => (
+  <>
+    {NAV.map((n) => (
+      <NavLink key={n.to} to={n.to} end={n.end} className={navLinkClass} onClick={onNavigate}>
+        {n.label}
+      </NavLink>
+    ))}
+  </>
+);
+
+const menuButtonClass =
+  "inline-flex items-center justify-center w-9 h-9 rounded-[6px] text-gray-700 hover:bg-gray-100 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px]";
+
 const AdminLayout: React.FC = () => {
   const { user, logout } = useAdminAuth();
+  const { pathname } = useLocation();
+  // Small screens: full-screen menu that slides in from the right; closes after picking a page
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => setMenuOpen(false), [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenuOpen(false);
+    window.addEventListener("keydown", onKey);
+    // Keep the page behind the menu from scrolling
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = overflow;
+    };
+  }, [menuOpen]);
 
   // First sign-in with a temporary password: force a password change before anything else
   if (user?.mustChangePassword) return <AccountPage forced />;
 
+  const title = <p className="text-[16px] font-bold text-gray-950">Trustwell Admin</p>;
+
+  // Note: main.css forces `.hidden` with !important, so responsive hiding uses max-md:hidden / md:hidden instead
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 md:grid md:grid-cols-[240px_minmax(0,1fr)]">
-      <aside className="bg-white border-b md:border-b-0 md:border-r border-gray-200 md:min-h-screen flex md:flex-col">
-        <div className="px-5 py-5 hidden md:block">
-          <p className="text-[16px] font-bold text-gray-950">Trustwell Admin</p>
+      {/* Small screens: top bar with the menu button */}
+      <header className="md:hidden flex items-center justify-between gap-3 px-4 py-3 bg-white border-b border-gray-200">
+        {title}
+        <button type="button" onClick={() => setMenuOpen(true)} aria-expanded={menuOpen} aria-controls="admin-mobile-nav" aria-label="Open menu" className={menuButtonClass}>
+          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            <path d="M4 7h16M4 12h16M4 17h16" />
+          </svg>
+        </button>
+      </header>
+
+      {/* Small screens: full-screen menu, slides in from the right */}
+      <div
+        id="admin-mobile-nav"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menu"
+        aria-hidden={!menuOpen}
+        inert={!menuOpen}
+        className={`md:hidden fixed inset-0 z-50 flex flex-col bg-white transition-transform duration-200 ease-out ${
+          menuOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-200">
+          {title}
+          <button type="button" onClick={() => setMenuOpen(false)} aria-label="Close menu" className={menuButtonClass}>
+            <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </div>
+        <nav aria-label="Admin" className="flex flex-col gap-1 px-3 py-3 flex-1 overflow-y-auto">
+          <NavLinks onNavigate={() => setMenuOpen(false)} />
+        </nav>
+        <div className="border-t border-gray-200 px-5 py-4">
+          <p className="text-[13px] text-gray-600 truncate">{user?.email}</p>
+          <button type="button" onClick={logout} className="mt-1 py-1 text-[14px] font-medium text-[#4338CA] hover:underline">
+            Sign out
+          </button>
+        </div>
+      </div>
+
+      {/* Desktop: sidebar pinned to the screen */}
+      <aside className="max-md:hidden min-w-0 bg-white border-r border-gray-200 sticky top-0 h-screen flex flex-col">
+        <div className="px-5 py-5">
+          {title}
           <p className="text-[12px] text-gray-500">Integrations console</p>
         </div>
-        <nav className="flex md:flex-col gap-1 px-3 py-2 overflow-x-auto flex-1" aria-label="Admin">
-          {NAV.map((n) => (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              end={n.end}
-              className={({ isActive }) =>
-                `px-3 py-2 rounded-[6px] text-[14px] whitespace-nowrap transition-colors ${
-                  isActive ? "bg-[#EEF2FF] text-[#3730A3] font-semibold" : "text-gray-700 hover:bg-gray-100"
-                }`
-              }
-            >
-              {n.label}
-            </NavLink>
-          ))}
+        <nav aria-label="Admin" className="flex flex-col gap-1 px-3 py-2 flex-1 overflow-y-auto">
+          <NavLinks />
         </nav>
-        <div className="hidden md:block border-t border-gray-200 px-5 py-4">
+        <div className="border-t border-gray-200 px-5 py-4">
           <p className="text-[13px] text-gray-950 truncate" title={user?.email}>
             {user?.email}
           </p>

@@ -130,7 +130,8 @@ JWT_SECRET=replace_with_a_random_secret
 ADMIN_API_KEY=replace_with_a_random_secret
 # Swagger UI at /api/docs (spec at /api/docs.json) is on outside production; set true to enable it in production
 # ENABLE_API_DOCS=true
-# Sales demo: open the app with ?code=demo to use the "demo" customer without Genesis.
+# Sales demo: open the app with ?code=demo (Genesis, customer "demo") or ?code=demo&source=FLQ
+# (FoodLogiQ, customer "demo-flq") to skip the host sign-in.
 # On by default in every environment (code "demo"); set another value to change the code, or "off" to disable it.
 # DEMO_CODE=demo
 

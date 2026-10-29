@@ -26,7 +26,7 @@ export const OverviewPage: React.FC = () => {
   );
 
   if (!data) return <LoadState loading={loading} error={error} />;
-  const [customers, catalog, users, audit] = data;
+  const [customerPage, catalog, users, audit] = data;
 
   const locked = users.filter((u) => u.lockoutEnd && new Date(u.lockoutEnd) > new Date()).length;
   const failed24h = audit.filter((a) => a.action === "login_failed" && Date.now() - new Date(a.createdAt).getTime() < 86_400_000).length;
@@ -36,7 +36,7 @@ export const OverviewPage: React.FC = () => {
       <PageHeader title="Overview" description="Customers, integrations and recent admin activity at a glance." />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Stat label="Customers" value={customers.length} to="/admin/customers" />
+        <Stat label="Customers" value={customerPage.total} to="/admin/customers" />
         <Stat label="Admin users" value={users.filter((u) => u.isActive).length} to="/admin/users" />
         <Stat label="Integrations shown to customers" value={`${catalog.filter((c) => c.isGlobalActive).length} of ${catalog.length}`} to="/admin/catalog" />
         <Stat label="Failed sign-ins (24h)" value={failed24h} to="/admin/audit" tone={failed24h ? "amber" : undefined} />

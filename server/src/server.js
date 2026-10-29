@@ -379,25 +379,31 @@ app.post('/api/code', strictLimiter, genesisAuth, (req, res) => {
 
 /* ------------ sales demo customer ------------ */
 const DEMO_LOGIN_CODE = DEMO_CODE === 'off' ? null : DEMO_CODE || 'demo';
-const DEMO_GENESIS_ID = 'demo';
+// One demo customer per product, since Genesis and FoodLogiQ customers are separate:
+// ?code=demo (or &source=GF) -> "demo", ?code=demo&source=FLQ -> "demo-flq"
+const DEMO_CUSTOMERS = {
+  GF: { genesisId: 'demo', customerName: 'Demo (Sales, Genesis)' },
+  FLQ: { genesisId: 'demo-flq', customerName: 'Demo (Sales, FoodLogiQ)' },
+};
 
-// Find or create the shared demo customer. It has a random Genesis token, so it can never
+// Find or create the product's demo customer. It has a random Genesis token, so it can never
 // authenticate through Genesis; the demo code is the only way in.
-async function getDemoCustomer() {
-  let customer = await prisma.customer.findUnique({ where: { genesisId: DEMO_GENESIS_ID } });
+async function getDemoCustomer(source) {
+  const { genesisId, customerName } = DEMO_CUSTOMERS[source] ?? DEMO_CUSTOMERS[DEFAULT_SOURCE];
+  let customer = await prisma.customer.findUnique({ where: { genesisId } });
   if (!customer) {
     try {
       customer = await prisma.customer.create({
         data: {
-          genesisId: DEMO_GENESIS_ID,
-          customerName: 'Demo (Sales)',
+          genesisId,
+          customerName,
           genesisAuthToken: crypto.randomBytes(32).toString('hex'),
         },
       });
     } catch (err) {
       // Two demo logins at the same time: the other request created it
       if (err?.code !== 'P2002') throw err;
-      customer = await prisma.customer.findUnique({ where: { genesisId: DEMO_GENESIS_ID } });
+      customer = await prisma.customer.findUnique({ where: { genesisId } });
     }
   }
   await addMissingIntegrations(customer.id).catch((e) => console.warn('demo addMissingIntegrations failed:', e?.message || e));
@@ -405,10 +411,10 @@ async function getDemoCustomer() {
 }
 
 // Exchange code -> customer (shared by GET /?code= and POST /api/session/exchange)
-async function exchangeCode(code) {
+async function exchangeCode(code, source) {
   if (typeof code !== 'string' || !code) return null;
   // Reusable (not single-use) so Sales can open the same link any number of times
-  if (DEMO_LOGIN_CODE && safeEqual(code, DEMO_LOGIN_CODE)) return getDemoCustomer();
+  if (DEMO_LOGIN_CODE && safeEqual(code, DEMO_LOGIN_CODE)) return getDemoCustomer(source);
   const entry = consumeCode(code);
   if (!entry) return null;
   return prisma.customer.findUnique({ where: { genesisId: entry.genesisId } });
@@ -423,7 +429,7 @@ app.get('/', strictLimiter, async (req, res, next) => {
   const source = parseSource(req.query.source);
   if (!source) return res.status(400).send('Invalid source');
   try {
-    const customer = await exchangeCode(code);
+    const customer = await exchangeCode(code, source);
     if (!customer) return res.status(401).send('Invalid or expired code');
 
     startSession(res, customer, source);
@@ -443,7 +449,7 @@ app.post('/api/session/exchange', strictLimiter, async (req, res) => {
   const source = parseSource(req.body?.source ?? req.query.source);
   if (!source) return res.status(400).json({ error: 'invalid_source' });
   try {
-    const customer = await exchangeCode(req.body?.code ?? req.query.code);
+    const customer = await exchangeCode(req.body?.code ?? req.query.code, source);
     if (!customer) return res.status(401).json({ error: 'invalid_or_expired_code' });
 
     const token = startSession(res, customer, source);

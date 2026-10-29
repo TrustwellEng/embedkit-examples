@@ -80,17 +80,28 @@ export const ErrorText: React.FC<{ error: string | null }> = ({ error }) =>
   error ? <p className="text-[13px] text-red-600">{error}</p> : null;
 
 /* "date" + "by email" for the created/modified stamps; no email = system, customer or old data */
-export const ChangedBy: React.FC<{ at: string | null | undefined; by: string | null | undefined }> = ({ at, by }) => (
-  <div className="whitespace-nowrap">
-    <div className="text-gray-700">{formatDate(at ?? null)}</div>
-    <div className="text-[12px] text-gray-500">{by ? `by ${by}` : at ? "by system" : ""}</div>
+// wrap: let a long email break onto a second line (narrow tables)
+export const ChangedBy: React.FC<{ at: string | null | undefined; by: string | null | undefined; wrap?: boolean }> = ({ at, by, wrap }) => (
+  <div className={wrap ? "min-w-[150px]" : "whitespace-nowrap"}>
+    <div className="text-gray-700 whitespace-nowrap">{formatDate(at ?? null)}</div>
+    <div className={`text-[12px] text-gray-500 ${wrap ? "break-all" : ""}`}>{by ? `by ${by}` : at ? "by system" : ""}</div>
   </div>
 );
 
 /* ------------ table ------------ */
-export const Table: React.FC<React.PropsWithChildren<{ head: string[] }>> = ({ head, children }) => (
+// compact: tighter cell padding and headers that may wrap, for tables with many columns.
+// minWidth: below this the table scrolls inside its card instead of squeezing every column (small screens).
+export const Table: React.FC<React.PropsWithChildren<{ head: string[]; compact?: boolean; minWidth?: number }>> = ({
+  head,
+  compact,
+  minWidth,
+  children,
+}) => (
   <div className="overflow-x-auto">
-    <table className="w-full text-left text-[14px] text-gray-900">
+    <table
+      style={minWidth ? { minWidth } : undefined}
+      className={`w-full text-left text-[14px] text-gray-900 ${compact ? "[&_td]:px-3 [&_th]:px-3 [&_th]:whitespace-normal [&_th]:align-bottom" : ""}`}
+    >
       <thead className="bg-gray-50 text-[12px] uppercase tracking-wide text-gray-600">
         <tr>
           {head.map((h) => (
@@ -146,6 +157,57 @@ export const Toggle: React.FC<{ checked: boolean; onChange: (v: boolean) => void
     <span
       className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : ""}`}
     />
+  </button>
+);
+
+/* ------------ icon buttons ------------ */
+const iconProps = {
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 2,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  className: "w-4 h-4",
+  "aria-hidden": true,
+};
+
+export const EditIcon = () => (
+  <svg {...iconProps}>
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z" />
+  </svg>
+);
+
+export const RefreshIcon = () => (
+  <svg {...iconProps}>
+    <path d="M21 12a9 9 0 01-15.5 6.2L3 16" />
+    <path d="M3 12a9 9 0 0115.5-6.2L21 8" />
+    <path d="M21 3v5h-5M3 21v-5h5" />
+  </svg>
+);
+
+// Icon-only button; the label shows as a small tooltip on hover/focus and is the accessible name
+export const IconButton: React.FC<{ label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }> = ({
+  label,
+  onClick,
+  disabled,
+  children,
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={disabled}
+    aria-label={label}
+    className="group relative inline-flex items-center justify-center w-8 h-8 text-gray-700 bg-white border border-gray-300 rounded-[6px] hover:bg-gray-100 hover:text-gray-950 disabled:opacity-50 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] transition-colors"
+  >
+    {children}
+    <span
+      role="tooltip"
+      className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[4px] bg-gray-900 text-white text-[12px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity z-10"
+    >
+      {label}
+    </span>
   </button>
 );
 

@@ -1,5 +1,5 @@
 import express from 'express';
-import { createCatalogRouter } from '../controllers/catalogController.js';
+import { createCatalogRouter, visibilityOf } from '../controllers/catalogController.js';
 import {
   actorId,
   ADMIN_COOKIE,
@@ -17,6 +17,7 @@ import {
   verifyPassword,
 } from './auth.js';
 
+const CUSTOMER_PAGE_SIZE = 30;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const normalizeEmail = (v) => (typeof v === 'string' ? v.trim().toLowerCase() : '');
@@ -307,13 +308,22 @@ export function createAdminRouter(deps) {
 
   router.get(
     '/customers',
-    handle('List customers', async (_req, res) => {
-      const customers = await prisma.customer.findMany({ orderBy: { genesisId: 'asc' } });
+    // Paged: ?page=1&pageSize=30&q=<customer ID contains>
+    handle('List customers', async (req, res) => {
+      const pageSize = Math.min(Math.max(Number(req.query.pageSize) || CUSTOMER_PAGE_SIZE, 1), CUSTOMER_PAGE_SIZE);
+      const page = Math.max(Math.floor(Number(req.query.page)) || 1, 1);
+      const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+      const where = q ? { genesisId: { contains: q } } : {};
+
+      const [total, customers] = await Promise.all([
+        prisma.customer.count({ where }),
+        prisma.customer.findMany({ where, orderBy: { genesisId: 'asc' }, skip: (page - 1) * pageSize, take: pageSize }),
+      ]);
       const [counts, emails] = await Promise.all([
         integrationCounts(customers.map((c) => c.id)),
         actorEmails(customers.flatMap((c) => [c.createdBy, c.modifiedBy])),
       ]);
-      res.json(customers.map((c) => toCustomerDto(c, counts, emails)));
+      res.json({ items: customers.map((c) => toCustomerDto(c, counts, emails)), total, page, pageSize });
     })
   );
 
@@ -380,7 +390,7 @@ export function createAdminRouter(deps) {
       const customer = await findCustomer(req, res);
       if (!customer) return;
       const [catalog, rows, credentials] = await Promise.all([
-        prisma.integrationsCatalog.findMany({ orderBy: { name: 'asc' } }),
+        prisma.integrationsCatalog.findMany({ orderBy: { name: 'asc' }, include: { sourceInfos: { select: { source: true, isActive: true } } } }),
         prisma.customerIntegration.findMany({ where: { customerId: customer.id } }),
         prisma.connectionCredential.findMany({ where: { customerId: customer.id }, select: { integrationId: true, modifiedAt: true } }),
       ]);
@@ -398,6 +408,7 @@ export function createAdminRouter(deps) {
             iconUrl: item.iconUrl,
             isGlobalActive: item.isGlobalActive,
             isComingSoon: item.isComingSoon,
+            visibleIn: visibilityOf(item.sourceInfos),
             isEnabled: row?.isEnabled ?? false,
             isConfigured: row?.isConfigured ?? false,
             credentialUpdatedAt: credentialAt[item.id] ?? null,

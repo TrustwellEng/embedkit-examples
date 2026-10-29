@@ -1,9 +1,11 @@
 import React, { useState } from "react";
-import { CatalogItem, catalogApi } from "../api";
+import { CatalogItem, catalogApi, Product, PRODUCTS } from "../api";
 import {
   Badge,
   Card,
   ChangedBy,
+  EditIcon,
+  IconButton,
   ErrorText,
   Field,
   inputClass,
@@ -12,7 +14,6 @@ import {
   PageHeader,
   primaryButtonClass,
   secondaryButtonClass,
-  smallButtonClass,
   Td,
   Table,
   Toggle,
@@ -21,9 +22,9 @@ import {
 
 const TIERS = ["Standard", "Premium"];
 
-type FormState = { id: string; name: string; category: string; iconUrl: string; badge: string; isComingSoon: boolean; enableForCustomers: boolean };
+type FormState = { id: string; name: string; iconUrl: string; badge: string; isComingSoon: boolean; enableForCustomers: boolean };
 
-const emptyForm: FormState = { id: "", name: "", category: "", iconUrl: "", badge: "Standard", isComingSoon: false, enableForCustomers: true };
+const emptyForm: FormState = { id: "", name: "", iconUrl: "", badge: "Standard", isComingSoon: false, enableForCustomers: true };
 
 // Add (item = null) or edit an IntegrationsCatalog row
 const CatalogFormModal: React.FC<{ item: CatalogItem | null; onClose: () => void; onSaved: () => void }> = ({ item, onClose, onSaved }) => {
@@ -43,7 +44,6 @@ const CatalogFormModal: React.FC<{ item: CatalogItem | null; onClose: () => void
     setError(null);
     const fields = {
       name: form.name.trim(),
-      category: form.category.trim(),
       iconUrl: form.iconUrl.trim() || null,
       badge: form.badge || null,
       isComingSoon: form.isComingSoon,
@@ -91,14 +91,9 @@ const CatalogFormModal: React.FC<{ item: CatalogItem | null; onClose: () => void
             placeholder="oracle_plm"
           />
         </Field>
-        <div className="grid sm:grid-cols-2 gap-4">
-          <Field label="Name" htmlFor="cat-name">
-            <input id="cat-name" required maxLength={100} value={form.name} onChange={(e) => set("name", e.target.value)} className={inputClass} />
-          </Field>
-          <Field label="Category" htmlFor="cat-category">
-            <input id="cat-category" required maxLength={50} value={form.category} onChange={(e) => set("category", e.target.value)} className={inputClass} placeholder="ERP" />
-          </Field>
-        </div>
+        <Field label="Name" htmlFor="cat-name">
+          <input id="cat-name" required maxLength={100} value={form.name} onChange={(e) => set("name", e.target.value)} className={inputClass} />
+        </Field>
         <div className="grid sm:grid-cols-2 gap-4">
           <Field label="Tier" htmlFor="cat-badge">
             <select id="cat-badge" value={form.badge} onChange={(e) => set("badge", e.target.value)} className={inputClass}>
@@ -152,11 +147,29 @@ export const CatalogPage: React.FC = () => {
     }
   };
 
+  const setVisibility = async (item: CatalogItem, product: Product, visible: boolean) => {
+    setRowError(null);
+    setData(
+      (rows) =>
+        rows?.map((r) =>
+          r.id === item.id ? { ...r, visibleIn: { GF: true, FLQ: true, ...r.visibleIn, [product]: visible } } : r
+        ) ?? rows
+    );
+    try {
+      await catalogApi.setVisibility(item.id, product, visible);
+    } catch (err: any) {
+      setRowError(err?.message || "Failed to update.");
+      reload();
+    }
+  };
+
   return (
     <>
       <PageHeader
         title="Integrations catalog"
-        description={'Every integration offered to customers. "Shown to customers" hides or shows it for all customers at once; to turn one off for a single customer, use "Enabled" on that customer.'}
+        description={
+          'Every integration offered to customers. "All customers" hides or shows it for everyone; Genesis and FoodLogiQ hide or show it for that product\'s customers only. Customers see it only when both are on. To turn one off for a single customer, use "Enabled" on that customer.'
+        }
         actions={
           <button type="button" onClick={() => setEditing(null)} className={primaryButtonClass}>
             + Add integration
@@ -168,21 +181,19 @@ export const CatalogPage: React.FC = () => {
         {rowError && <p className="px-4 pt-3 text-[13px] text-red-600">{rowError}</p>}
         <LoadState loading={loading && !data} error={error} empty={data?.length === 0} />
         {data && data.length > 0 && (
-          <Table head={["Integration", "ID", "Category", "Tier", "Coming soon", "Shown to customers", "Last changed", ""]}>
+          <Table compact minWidth={820} head={["Integration", "Tier", "Coming soon", "All customers", ...PRODUCTS.map((p) => p.label), "Last changed", ""]}>
             {data.map((item) => (
               <tr key={item.id} className={item.isGlobalActive ? "" : "bg-gray-50"}>
                 <Td>
                   <div className="flex items-center gap-3">
                     {item.iconUrl ? (
-                      <img src={item.iconUrl} alt="" className="w-6 h-6 object-contain" />
+                      <img src={item.iconUrl} alt="" className="w-6 h-6 object-contain shrink-0" />
                     ) : (
-                      <span className="w-6 h-6 rounded bg-gray-100" aria-hidden="true" />
+                      <span className="w-6 h-6 rounded bg-gray-100 shrink-0" aria-hidden="true" />
                     )}
-                    <span className={`font-medium ${item.isGlobalActive ? "text-gray-950" : "text-gray-500"}`}>{item.name}</span>
+                    <span className={`font-medium whitespace-nowrap ${item.isGlobalActive ? "text-gray-950" : "text-gray-500"}`}>{item.name}</span>
                   </div>
                 </Td>
-                <Td className="font-mono text-[13px] text-gray-600">{item.id}</Td>
-                <Td>{item.category}</Td>
                 <Td>{item.badge ? <Badge tone={item.badge === "Premium" ? "indigo" : "gray"}>{item.badge}</Badge> : "—"}</Td>
                 <Td>
                   <Toggle checked={item.isComingSoon} onChange={(v) => patch(item, { isComingSoon: v })} label={`${item.name} coming soon`} />
@@ -190,13 +201,22 @@ export const CatalogPage: React.FC = () => {
                 <Td>
                   <Toggle checked={item.isGlobalActive} onChange={(v) => patch(item, { isGlobalActive: v })} label={`Show ${item.name} to all customers`} />
                 </Td>
+                {PRODUCTS.map((p) => (
+                  <Td key={p.id}>
+                    <Toggle
+                      checked={item.visibleIn?.[p.id] ?? true}
+                      onChange={(v) => setVisibility(item, p.id, v)}
+                      label={`Show ${item.name} to ${p.label} customers`}
+                    />
+                  </Td>
+                ))}
                 <Td>
-                  <ChangedBy at={item.modifiedAt} by={item.modifiedByEmail} />
+                  <ChangedBy wrap at={item.modifiedAt} by={item.modifiedByEmail} />
                 </Td>
                 <Td className="text-right">
-                  <button type="button" onClick={() => setEditing(item)} className={smallButtonClass}>
-                    Edit
-                  </button>
+                  <IconButton label={`Edit ${item.name}`} onClick={() => setEditing(item)}>
+                    <EditIcon />
+                  </IconButton>
                 </Td>
               </tr>
             ))}
