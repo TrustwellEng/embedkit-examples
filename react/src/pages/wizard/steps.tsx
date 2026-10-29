@@ -118,9 +118,9 @@ const submitHandler = (onSubmit: () => void) => (e: React.FormEvent) => {
 function welcomeCopy(integration: Integration) {
   if (isSlackIntegration(integration.id)) {
     return {
-      body: "Get real-time Trustwell notifications in your Slack workspace. Connect your workspace, choose which events to send, and pick where they're posted. This takes about 3 minutes.",
+      body: "Get real-time Trustwell notifications in your Slack workspace. Enter your Slack app credentials, choose which events to send, and pick the channel where they're posted. This takes about 3 minutes.",
       steps: [
-        { title: "Connection", text: "Authorize Trustwell to post to your Slack workspace" },
+        { title: "Connection", text: "Enter your Slack app's Client ID, Client Secret and Bot Token" },
         { title: "Data sync", text: "Choose which events to send to Slack" },
         { title: "Delivery", text: "Choose the channel and confirm real-time delivery" },
       ],
@@ -406,7 +406,7 @@ export const DeliveryStep: React.FC<
       <Field
         label="Slack channel"
         htmlFor="deliveryChannel"
-        hint="The channel where messages are posted (e.g., #trustwell-alerts). For private channels, invite the Trustwell app to the channel first."
+        hint="The channel where messages are posted (e.g., #trustwell-alerts). For private channels, invite your Slack app to the channel first."
         error={channelError}
       >
         <input

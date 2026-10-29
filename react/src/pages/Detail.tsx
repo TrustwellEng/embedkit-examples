@@ -9,9 +9,7 @@ import {
   defaultSchedule,
   DeliveryStep,
   isSlackIntegration,
-  isValidSlackChannel,
   ScheduleStep,
-  SLACK_CHANNEL_ERROR,
   WelcomeStep,
 } from "./wizard/steps";
 import { Field, inputClass, StepFooter } from "./wizard/ui";
@@ -21,7 +19,7 @@ interface DetailProps {
   onBack: () => void;
 }
 
-type SlackFieldErrors = { accessToken?: string; channelName?: string };
+type SlackFieldErrors = { accessToken?: string };
 
 const SlackDetails = ({
   formData,
@@ -57,23 +55,6 @@ const SlackDetails = ({
         onChange={handleChange}
         aria-invalid={!!errors.accessToken}
         className={`${inputClass} font-mono`}
-      />
-    </Field>
-    <Field
-      label="Channel"
-      htmlFor="channelName"
-      hint="The channel where messages are posted (e.g., #trustwell-alerts). For private channels, invite the Slack app to the channel first."
-      error={errors.channelName}
-    >
-      <input
-        id="channelName"
-        type="text"
-        name="channelName"
-        value={formData.channelName || ""}
-        onChange={handleChange}
-        placeholder="#trustwell-alerts"
-        aria-invalid={!!errors.channelName}
-        className={inputClass}
       />
     </Field>
   </>
@@ -481,9 +462,8 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
     const slack = formData as SlackConfigure;
     const errors: SlackFieldErrors = {};
     if (!slack.accessToken?.trim().startsWith("xoxb-")) errors.accessToken = "Enter a valid bot token (starts with xoxb-).";
-    if (!isValidSlackChannel(slack.channelName)) errors.channelName = SLACK_CHANNEL_ERROR;
     setSlackErrors(errors);
-    if (errors.accessToken || errors.channelName) return null;
+    if (errors.accessToken) return null;
 
     setSaving(true);
     setError(null);
@@ -530,7 +510,7 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
       if (res.ok) return null;
       const data = await res.json().catch(() => null);
       if (data?.error === "channel_not_found" || data?.error === "not_in_channel") {
-        return "Trustwell can't post to this channel. Check the name, and for private channels invite the app first.";
+        return "Trustwell can't post to this channel. Check the name, and for private channels invite your Slack app first.";
       }
       return SLACK_CONNECTION_ERROR;
     } catch {
@@ -538,12 +518,14 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
     }
   };
 
+  // Welcome is only an introduction: show no progress there, even if later steps were saved before
+  const onWelcome = step === STEP.welcome;
   const completed = [
-    step > STEP.welcome || saved.connection || saved.dataSync || saved.schedule,
-    saved.connection,
-    saved.dataSync,
-    saved.schedule,
-    saved.connection && saved.dataSync && saved.schedule,
+    !onWelcome,
+    !onWelcome && saved.connection,
+    !onWelcome && saved.dataSync,
+    !onWelcome && saved.schedule,
+    !onWelcome && saved.connection && saved.dataSync && saved.schedule,
   ];
 
   const renderStep = () => {
@@ -558,7 +540,7 @@ export const Detail: React.FC<DetailProps> = ({ integration, onBack }) => {
               <h2 className="text-lg font-bold text-gray-950">Connection</h2>
               <p className="text-sm text-gray-600 mt-1">
                 {isSlack
-                  ? "Enter your Slack app credentials and the channel where Trustwell should post messages. You can find these in your Slack app settings at api.slack.com/apps."
+                  ? "Enter your Slack app credentials. You can find these in your Slack app settings at api.slack.com/apps. You choose the channel in the Delivery step."
                   : `Enter the API credentials for your ${integration.name} account. Your ${isOracle ? "Oracle" : integration.name} administrator can provide these.`}
               </p>
             </div>
