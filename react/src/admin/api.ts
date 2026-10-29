@@ -48,7 +48,6 @@ export interface AuditLog {
   email: string | null;
   action: AuditAction;
   detail: string | null;
-  ip: string | null;
   createdAt: string;
 }
 

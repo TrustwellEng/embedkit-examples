@@ -28,8 +28,8 @@ export const AuditPage: React.FC = () => {
   const exportCsv = () => {
     if (!data) return;
     const csv = toCsv([
-      ["Time", "User", "Action", "Detail", "IP"],
-      ...data.map((a) => [a.createdAt, a.email ?? "", a.action, a.detail ?? "", a.ip ?? ""]),
+      ["Time", "User", "Action", "Detail"],
+      ...data.map((a) => [a.createdAt, a.email ?? "", a.action, a.detail ?? ""]),
     ]);
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
     const link = Object.assign(document.createElement("a"), { href: url, download: "audit-log.csv" });
@@ -73,7 +73,7 @@ export const AuditPage: React.FC = () => {
       <Card>
         <LoadState loading={loading && !data} error={error} empty={data?.length === 0} emptyText="No events match these filters." />
         {data && data.length > 0 && (
-          <Table head={["Time", "User", "Action", "Detail", "IP"]}>
+          <Table head={["Time", "User", "Action", "Detail"]}>
             {data.map((a) => (
               <tr key={a.id}>
                 <Td className="whitespace-nowrap text-gray-700">{formatDate(a.createdAt)}</Td>
@@ -82,7 +82,6 @@ export const AuditPage: React.FC = () => {
                   <Badge tone={ACTION_META[a.action]?.tone ?? "gray"}>{ACTION_META[a.action]?.label ?? a.action}</Badge>
                 </Td>
                 <Td className="text-gray-700">{a.detail ?? "—"}</Td>
-                <Td className="font-mono text-[13px] text-gray-600">{a.ip}</Td>
               </tr>
             ))}
           </Table>

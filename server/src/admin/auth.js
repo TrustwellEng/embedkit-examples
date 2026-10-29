@@ -127,7 +127,6 @@ export function createAudit(prisma) {
           action,
           email: email !== undefined ? email : req.admin?.email ?? null,
           detail: detail ? String(detail).slice(0, 500) : null,
-          ip: (req.ip || '').slice(0, 45) || null,
           createdBy: userId !== undefined ? userId : req.admin?.id ?? null,
         },
       });

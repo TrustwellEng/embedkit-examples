@@ -157,7 +157,6 @@ model AdminAuditLog {
   action    String   @db.NVarChar(50)
   email     String?  @db.NVarChar(256)
   detail    String?  @db.NVarChar(500)
-  ip        String?  @db.NVarChar(45)
   createdAt DateTime @default(now())
   createdBy String?  @db.UniqueIdentifier
 
