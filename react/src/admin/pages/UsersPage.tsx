@@ -5,21 +5,25 @@ import {
   Badge,
   Card,
   ChangedBy,
-  dangerButtonClass,
   ErrorText,
   Field,
   formatDate,
+  IconButton,
   inputClass,
+  KeyIcon,
   LoadState,
   Modal,
   PageHeader,
   primaryButtonClass,
   secondaryButtonClass,
   SecretBox,
-  smallButtonClass,
+  ShieldResetIcon,
   Td,
   Table,
+  UnlockIcon,
   useAsync,
+  UserCheckIcon,
+  UserOffIcon,
 } from "../ui";
 
 const isLocked = (u: AdminUser) => !!u.lockoutEnd && new Date(u.lockoutEnd) > new Date();
@@ -128,7 +132,7 @@ export const UsersPage: React.FC = () => {
         {actionError && <p className="px-4 pt-3 text-[13px] text-red-600">{actionError}</p>}
         <LoadState loading={loading && !data} error={error} empty={data?.length === 0} />
         {data && data.length > 0 && (
-          <Table head={["Email", "Status", ...(MFA_ENABLED ? ["MFA"] : []), "Failed sign-ins", "Last sign-in", "Created", "Last changed", "Actions"]}>
+          <Table compact minWidth={760} head={["Email", "Status", ...(MFA_ENABLED ? ["MFA"] : []), "Failed sign-ins", "Last sign-in", "Created", "Last changed", "Actions"]}>
             {data.map((u) => {
               const busy = busyId === u.id;
               const self = u.id === me?.id;
@@ -136,31 +140,31 @@ export const UsersPage: React.FC = () => {
                 <tr key={u.id}>
                   <Td className="font-medium text-gray-950">
                     {u.email}
-                    {self && <span className="ml-2 text-[12px] text-gray-500">(you)</span>}
+                    {self && <span className="block text-[12px] font-normal text-gray-500">(you)</span>}
                   </Td>
                   <Td>
                     <UserStatus user={u} />
                   </Td>
                   {MFA_ENABLED && <Td>{u.mfaEnabled ? <Badge tone="green">On</Badge> : <Badge tone="amber">Off</Badge>}</Td>}
                   <Td>{u.failedLoginCount}</Td>
-                  <Td className="whitespace-nowrap">{formatDate(u.lastLoginAt)}</Td>
+                  <Td className="min-w-[110px]">{formatDate(u.lastLoginAt)}</Td>
                   <Td>
-                    <ChangedBy at={u.createdAt} by={u.createdByEmail} />
+                    <ChangedBy wrap at={u.createdAt} by={u.createdByEmail} />
                   </Td>
                   <Td>
-                    <ChangedBy at={u.modifiedAt} by={u.modifiedByEmail} />
+                    <ChangedBy wrap at={u.modifiedAt} by={u.modifiedByEmail} />
                   </Td>
                   <Td>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex gap-2">
                       {isLocked(u) && (
-                        <button type="button" disabled={busy} className={smallButtonClass} onClick={() => run(u, () => usersApi.unlock(u.id))}>
-                          Unlock
-                        </button>
+                        <IconButton label="Unlock" tooltipAlign="end" disabled={busy} onClick={() => run(u, () => usersApi.unlock(u.id))}>
+                          <UnlockIcon />
+                        </IconButton>
                       )}
-                      <button
-                        type="button"
+                      <IconButton
+                        label="Reset password"
+                        tooltipAlign="end"
                         disabled={busy || !u.isActive}
-                        className={smallButtonClass}
                         onClick={() =>
                           run(
                             u,
@@ -172,32 +176,33 @@ export const UsersPage: React.FC = () => {
                           )
                         }
                       >
-                        Reset password
-                      </button>
+                        <KeyIcon />
+                      </IconButton>
                       {MFA_ENABLED && u.mfaEnabled && (
-                        <button
-                          type="button"
+                        <IconButton
+                          label="Reset MFA"
+                          tooltipAlign="end"
                           disabled={busy}
-                          className={smallButtonClass}
                           onClick={() => run(u, () => usersApi.resetMfa(u.id), `Reset MFA for ${u.email}? They will need to enroll again.`)}
                         >
-                          Reset MFA
-                        </button>
+                          <ShieldResetIcon />
+                        </IconButton>
                       )}
                       {!self &&
                         (u.isActive ? (
-                          <button
-                            type="button"
+                          <IconButton
+                            label="Deactivate"
+                            tone="danger"
+                            tooltipAlign="end"
                             disabled={busy}
-                            className={dangerButtonClass}
                             onClick={() => run(u, () => usersApi.setActive(u.id, false), `Deactivate ${u.email}? They will be signed out.`)}
                           >
-                            Deactivate
-                          </button>
+                            <UserOffIcon />
+                          </IconButton>
                         ) : (
-                          <button type="button" disabled={busy} className={smallButtonClass} onClick={() => run(u, () => usersApi.setActive(u.id, true))}>
-                            Reactivate
-                          </button>
+                          <IconButton label="Reactivate" tooltipAlign="end" disabled={busy} onClick={() => run(u, () => usersApi.setActive(u.id, true))}>
+                            <UserCheckIcon />
+                          </IconButton>
                         ))}
                     </div>
                   </Td>

@@ -187,24 +187,74 @@ export const RefreshIcon = () => (
   </svg>
 );
 
-// Icon-only button; the label shows as a small tooltip on hover/focus and is the accessible name
-export const IconButton: React.FC<{ label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }> = ({
-  label,
-  onClick,
-  disabled,
-  children,
-}) => (
+export const KeyIcon = () => (
+  <svg {...iconProps}>
+    <circle cx="7.5" cy="15.5" r="4.5" />
+    <path d="M10.7 12.3L21 2M17 6l3 3M14 9l2.5 2.5" />
+  </svg>
+);
+
+export const UnlockIcon = () => (
+  <svg {...iconProps}>
+    <rect x="4" y="11" width="16" height="10" rx="2" />
+    <path d="M8 11V7a4 4 0 017.8-1.2" />
+  </svg>
+);
+
+export const ShieldResetIcon = () => (
+  <svg {...iconProps}>
+    <path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z" />
+    <path d="M9 12.5a3 3 0 105.6-1.5M14.8 8.8V11h-2.2" />
+  </svg>
+);
+
+// Lucide "user-x"
+export const UserOffIcon = () => (
+  <svg {...iconProps}>
+    <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M17 8l5 5M22 8l-5 5" />
+  </svg>
+);
+
+// Lucide "user-check" (pairs with UserOffIcon)
+export const UserCheckIcon = () => (
+  <svg {...iconProps}>
+    <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M16 11l2 2 4-4" />
+  </svg>
+);
+
+const ICON_BUTTON_TONES = {
+  default: "text-gray-700 border-gray-300 hover:bg-gray-100 hover:text-gray-950",
+  danger: "text-[#B91C1C] border-[#FCA5A5] hover:bg-[#FEF2F2]",
+};
+
+// Icon-only button; the label shows as a small tooltip on hover/focus and is the accessible name.
+// tooltipAlign "end": tooltip grows to the left, for buttons at the right edge of a scroll container
+// (a centered tooltip would stick out and add a scrollbar).
+export const IconButton: React.FC<{
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: keyof typeof ICON_BUTTON_TONES;
+  tooltipAlign?: "center" | "end";
+  children: React.ReactNode;
+}> = ({ label, onClick, disabled, tone = "default", tooltipAlign = "center", children }) => (
   <button
     type="button"
     onClick={onClick}
     disabled={disabled}
     aria-label={label}
-    className="group relative inline-flex items-center justify-center w-8 h-8 text-gray-700 bg-white border border-gray-300 rounded-[6px] hover:bg-gray-100 hover:text-gray-950 disabled:opacity-50 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] transition-colors"
+    className={`group relative inline-flex items-center justify-center w-8 h-8 bg-white border rounded-[6px] disabled:opacity-50 focus:outline focus:outline-[3px] focus:outline-[#0071EC] focus:outline-offset-[2px] transition-colors ${ICON_BUTTON_TONES[tone]}`}
   >
     {children}
     <span
       role="tooltip"
-      className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-1 rounded-[4px] bg-gray-900 text-white text-[12px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity z-10"
+      className={`pointer-events-none absolute bottom-full mb-1.5 px-2 py-1 rounded-[4px] bg-gray-900 text-white text-[12px] font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity z-10 ${
+        tooltipAlign === "end" ? "right-0" : "left-1/2 -translate-x-1/2"
+      }`}
     >
       {label}
     </span>
