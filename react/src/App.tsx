@@ -46,7 +46,7 @@ const AppShell: React.FC = () => {
       {!selectedApp ? (
         <Landing onSelectIntegration={handleSelectIntegration} />
       ) : selectedApp.status === "disabled" ? (
-        // Premium without a license: "Request" opens the contact page instead of the wizard
+        // Not licensed (Standard or Premium): "Request" opens the contact page instead of the wizard
         <RequestLicense integration={selectedApp} onBack={handleBackToLanding} />
       ) : (
         <Detail

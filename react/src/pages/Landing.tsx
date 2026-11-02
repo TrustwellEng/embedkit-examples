@@ -276,10 +276,9 @@ const CardBody: React.FC<{ item: Integration; className: string; children?: Reac
   </div>
 );
 
-// Standard:  connected -> Connected; not connected -> Available (opens the wizard);
-//            disabled -> Unavailable + Request (contact page)
-// Premium:   connected -> Connected; not connected -> Licensed + Set up (wizard);
-//            disabled (not enabled for the customer) -> Not licensed + Request (contact page)
+// Standard:  connected -> Connected; not connected -> Available (opens the wizard)
+// Premium:   connected -> Connected; not connected -> Licensed + Set up (wizard)
+// Both:      disabled (not enabled for the customer) -> Not licensed + Request (contact page)
 // Coming soon: "Coming soon" ribbon, not clickable
 const IntegrationCard: React.FC<{ item: Integration; onSelect: () => void }> = ({ item, onSelect }) => {
   const { status } = item;
@@ -303,21 +302,15 @@ const IntegrationCard: React.FC<{ item: Integration; onSelect: () => void }> = (
   if (status === "connected") {
     statusNode = <ConnectedStatus />;
     statusLabel = "connected";
-  } else if (standard) {
+  } else if (standard && status === "not_connected") {
     // Connecting is done through the wizard (CustomerIntegration.isConfigured)
-    statusNode =
-      status === "not_connected" ? (
-        <span className="mt-3 inline-flex items-center gap-1.5 text-[13px] text-gray-600">
-          <span aria-hidden="true" className="w-2 h-2 rounded-full border border-gray-500" />
-          Available
-        </span>
-      ) : (
-        <>
-          <span className="mt-3 text-[13px] font-medium text-gray-600">Unavailable</span>
-          <CardAction label="Request" />
-        </>
-      );
-    statusLabel = status === "not_connected" ? "available" : "unavailable, request access";
+    statusNode = (
+      <span className="mt-3 inline-flex items-center gap-1.5 text-[13px] text-gray-600">
+        <span aria-hidden="true" className="w-2 h-2 rounded-full border border-gray-500" />
+        Available
+      </span>
+    );
+    statusLabel = "available";
   } else if (status === "not_connected") {
     statusNode = (
       <>
