@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Integration, IntegrationStatus } from "../data/integrations";
+import { Integration, IntegrationStatus, isStandard } from "../data/integrations";
 import { apiFetch, exchangeCode, exchangeCodeFromUrl } from "../service/session";
 
 interface LandingProps {
@@ -213,9 +213,7 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
   );
 };
 
-// Group comes from the catalog badge (Standard / Premium); anything not Standard is Premium
 const STANDARD_BUNDLE_SIZE = 3;
-const isStandard = (item: Integration) => item.badge?.trim().toLowerCase() === "standard";
 
 const IntegrationGroup: React.FC<{
   title: string;

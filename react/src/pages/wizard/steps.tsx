@@ -1,5 +1,5 @@
 import React from "react";
-import { DataSyncConfig, Integration, IntegrationConfigure, ScheduleConfig, SlackConfigure } from "../../data/integrations";
+import { DataSyncConfig, Integration, IntegrationConfigure, isStandard, ScheduleConfig, SlackConfigure } from "../../data/integrations";
 import { Field, inputClass, primaryButtonClass, secondaryButtonClass, StepFooter } from "./ui";
 
 /* ------------ options ------------ */
@@ -20,6 +20,9 @@ function browserTimezone() {
     return "UTC";
   }
 }
+
+// Premium wizards link here for setup help (e.g. a booking or support page); the link is hidden when unset
+const TECHNICAL_SPECIALIST_URL = import.meta.env.VITE_TECHNICAL_SPECIALIST_URL as string | undefined;
 
 export const isSlackIntegration = (id: string) => id === "slack_integration" || id === "stack_integration";
 
@@ -248,6 +251,20 @@ export const DataSyncStep: React.FC<StepProps<DataSyncConfig> & { integration: I
           </label>
         ))}
       </fieldset>
+
+      {TECHNICAL_SPECIALIST_URL && !isStandard(integration) && (
+        <p className="text-[13px] text-gray-600">
+          Having issues?{" "}
+          <a
+            href={TECHNICAL_SPECIALIST_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-[#4F46E5] hover:underline"
+          >
+            Connect with a Technical Specialist
+          </a>
+        </p>
+      )}
 
       {sync.note && (
         <p className="flex gap-2 px-4 py-3 rounded-[8px] bg-[#EFF6FF] text-[13px] text-[#1E3A8A]">

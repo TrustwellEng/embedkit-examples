@@ -13,6 +13,9 @@ export interface Integration {
   status: IntegrationStatus;
 }
 
+// Tier comes from the catalog badge (Standard / Premium); anything not Standard is Premium
+export const isStandard = (item: Integration) => item.badge?.trim().toLowerCase() === "standard";
+
 export interface IntegrationConfigure {
   id: string;
 }
