@@ -21,7 +21,7 @@ function browserTimezone() {
   }
 }
 
-// Premium wizards link here for setup help (e.g. a booking or support page); the link is hidden when unset
+// Premium wizards link here for setup help (e.g. a booking or support page); unset -> opens the current page
 const TECHNICAL_SPECIALIST_URL = import.meta.env.VITE_TECHNICAL_SPECIALIST_URL as string | undefined;
 
 export const isSlackIntegration = (id: string) => id === "slack_integration" || id === "stack_integration";
@@ -252,11 +252,11 @@ export const DataSyncStep: React.FC<StepProps<DataSyncConfig> & { integration: I
         ))}
       </fieldset>
 
-      {TECHNICAL_SPECIALIST_URL && !isStandard(integration) && (
-        <p className="text-[13px] text-gray-600">
+      {!isStandard(integration) && (
+        <p className="text-center text-[13px] text-gray-600">
           Having issues?{" "}
           <a
-            href={TECHNICAL_SPECIALIST_URL}
+            href={TECHNICAL_SPECIALIST_URL || window.location.href}
             target="_blank"
             rel="noopener noreferrer"
             className="font-semibold text-[#4F46E5] hover:underline"
