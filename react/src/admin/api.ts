@@ -59,11 +59,17 @@ export interface AuditLog {
   createdAt: string;
 }
 
+export const customerProduct = (c: Pick<Customer, "genesisId">): Product => (c.genesisId ? "GF" : "FLQ");
+export const customerLabel = (c: Pick<Customer, "genesisId" | "flqCustomerId">) => c.genesisId ?? `FLQ ${c.flqCustomerId}`;
+
 export interface Customer extends Stamps {
   id: string;
-  genesisId: string;
+  // Either a Genesis customer (genesisId + token) or a Food LogiQ one (flqCustomerId + username); the other is null
+  genesisId: string | null;
+  flqCustomerId: string | null;
+  flqUsername: string | null;
   customerName: string | null;
-  tokenPreview: string; // last 4 chars only; the full token never leaves the server
+  tokenPreview: string | null; // last 4 chars only; the full token never leaves the server
   enabledCount: number;
   configuredCount: number;
 }
@@ -257,7 +263,7 @@ export const auditApi = {
 };
 
 /* ------------ customers ------------ */
-export const CUSTOMER_PAGE_SIZE = 30;
+export const CUSTOMER_PAGE_SIZE = 10;
 
 export interface Page<T> {
   items: T[];

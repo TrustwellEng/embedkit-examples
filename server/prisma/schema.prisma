@@ -8,9 +8,16 @@ datasource db {
 
 model Customer {
   id               String    @id @default(uuid()) @db.UniqueIdentifier
-  genesisId        String    @unique @db.VarChar(100)
-  genesisAuthToken String    @db.VarChar(255)
+  // A customer is either Genesis or Food LogiQ (FLQ); the other product's columns are null.
+  // Genesis (POST /api/code): genesisId + genesisAuthToken.
+  // FLQ (POST /api/flq/code): flqCustomerId + flqUsername + flqPasswordHash (scrypt).
+  // Both ids are unique only when set: filtered indexes in prisma/sql/2026-11-06_add_flq_credentials.sql
+  genesisId        String?   @unique @db.VarChar(100)
+  genesisAuthToken String?   @db.VarChar(255)
   customerName     String?   @db.NVarChar(255)
+  flqCustomerId    String?   @unique @db.VarChar(100)
+  flqUsername      String?   @db.NVarChar(256)
+  flqPasswordHash  String?   @db.NVarChar(255)
   createdAt        DateTime  @default(now())
   createdBy        String?   @db.UniqueIdentifier
   modifiedAt       DateTime? @updatedAt

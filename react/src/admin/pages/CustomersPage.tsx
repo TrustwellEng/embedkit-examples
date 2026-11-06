@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { customersApi } from "../api";
-import { Card, ChangedBy, inputClass, LoadState, PageHeader, smallButtonClass, Td, Table, useAsync } from "../ui";
+import { customerProduct, customersApi, PRODUCTS } from "../api";
+import { Badge, Card, ChangedBy, inputClass, LoadState, PageHeader, smallButtonClass, Td, Table, useAsync } from "../ui";
 
 const SEARCH_DELAY_MS = 300;
 
@@ -53,12 +53,18 @@ export const CustomersPage: React.FC = () => {
       <Card>
         <LoadState loading={loading && !data} error={error} empty={!!data && !rows.length} emptyText="No customers match." />
         {!error && rows.length > 0 && (
-          <Table head={["Customer ID", "Token", "Last changed", "Integrations", ""]}>
+          <Table head={["Customer ID", "Product", "Credentials", "Last changed", "Integrations", ""]}>
             {rows.map((c) => (
               <tr key={c.id} className="hover:bg-gray-50">
-                <Td className="font-mono text-[13px] font-medium text-gray-950">{c.genesisId}</Td>
+                <Td className="font-mono text-[13px] font-medium text-gray-950">{c.genesisId ?? c.flqCustomerId}</Td>
                 <Td>
-                  <span className="font-mono text-[12px] text-gray-500">••••{c.tokenPreview}</span>
+                  <Badge tone={customerProduct(c) === "GF" ? "indigo" : "green"}>
+                    {PRODUCTS.find((p) => p.id === customerProduct(c))?.label}
+                  </Badge>
+                </Td>
+                <Td>
+                  {/* Genesis: token preview; Food LogiQ: username (password is never shown) */}
+                  <span className="font-mono text-[12px] text-gray-500">{c.tokenPreview ? `••••${c.tokenPreview}` : c.flqUsername}</span>
                 </Td>
                 <Td>
                   <ChangedBy at={c.modifiedAt ?? c.createdAt} by={c.modifiedByEmail} />

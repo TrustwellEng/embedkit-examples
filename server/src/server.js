@@ -11,6 +11,7 @@ import { PrismaMssql } from '@prisma/adapter-mssql';
 import { PrismaClient } from '@prisma/client';
 import swaggerUi from 'swagger-ui-express';
 import { createAdminRouter } from './admin/routes.js';
+import { createFlqAuth } from './flq/auth.js';
 import { openapiSpec } from './docs/openapi.js';
 
 /* ------------ env ------------ */
@@ -28,6 +29,8 @@ const {
   CODE_TTL_SEC = '60',
   // Genesis GraphQL API used to validate x-genesis-auth-token
   GENESIS_API_URL = 'https://api-dev.trustwell.com/genesis',
+  // FoodLogiQ auth API used to validate x-username / x-password on POST /api/flq/code
+  FLQ_AUTH_URL = 'https://sandbox-api.foodlogiq.com/oauth_accesstoken',
   // Optional shared secret for scripts/Postman on /api/admin/* (sent as `x-admin-key`); the /admin UI uses admin sign-in
   ADMIN_API_KEY,
   // Serve Swagger UI at /api/docs in production too (always on outside production)
@@ -119,7 +122,7 @@ app.use((req, res, next) => {
     'Access-Control-Allow-Headers',
     isProd
       ? 'Content-Type, Authorization'
-      : 'Content-Type, Authorization, x-genesis-customer-id, x-genesis-auth-token' // dev: lets the test login form call /api/code
+      : 'Content-Type, Authorization, x-genesis-customer-id, x-genesis-auth-token, x-customer-id, x-username, x-password' // dev: lets the test login form call /api/code and /api/flq/code
   );
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
@@ -139,7 +142,7 @@ function makeLimiter(points, duration) {
   };
 }
 app.use(makeLimiter(100, 60));
-const strictLimiter = makeLimiter(20, 60); // for /api/code and /?code=
+const strictLimiter = makeLimiter(20, 60); // for /api/code, /api/flq/code and /?code=
 
 /* ------------ cookie + session helpers ------------ */
 // Cross-site iframe => production needs SameSite=None; Secure; Partitioned (CHIPS)
@@ -175,7 +178,7 @@ function parseSource(value) {
 // - Browsers allowing third-party cookies (Chrome/CHIPS): use the cookie.
 // - Safari / iframes with blocked cookies, Postman: send the token via `Authorization: Bearer <token>`.
 function startSession(res, customer, source) {
-  const token = jwt.sign({ sub: customer.genesisId, src: source }, JWT_SECRET, { expiresIn: SESSION_TTL_SEC });
+  const token = jwt.sign({ sub: customer.id, src: source }, JWT_SECRET, { expiresIn: SESSION_TTL_SEC });
   res.cookie('sid', token, { ...cookieOptions(), maxAge: SESSION_TTL_SEC * 1000 });
   return token;
 }
@@ -184,6 +187,18 @@ function readSessionToken(req) {
   const auth = req.headers.authorization;
   if (typeof auth === 'string' && auth.startsWith('Bearer ')) return auth.slice(7).trim();
   return req.cookies?.sid;
+}
+
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Session `sub` is Customer.id (Food LogiQ customers have no genesisId).
+// Tokens issued before that change carry the genesisId instead; they expire within SESSION_TTL_SEC.
+async function findSessionCustomer(sub) {
+  if (GUID_RE.test(sub)) {
+    const customer = await prisma.customer.findUnique({ where: { id: sub } });
+    if (customer) return customer;
+  }
+  return prisma.customer.findUnique({ where: { genesisId: sub } });
 }
 
 // Session obtained from a code -> load the customer from the DB on every request
@@ -199,7 +214,7 @@ async function requireSession(req, res, next) {
   }
 
   try {
-    const customer = await prisma.customer.findUnique({ where: { genesisId: String(claims.sub) } });
+    const customer = await findSessionCustomer(String(claims.sub));
     if (!customer) return res.status(401).json({ error: 'unauthorized' });
     req.customer = customer;
     // Tokens issued before the source flag existed have no `src` -> GF
@@ -215,11 +230,11 @@ async function requireSession(req, res, next) {
 // In-memory: only correct with a single instance. When scaling out, move to
 // Redis (SET code EX 60 NX + GETDEL) or a DB table with an expiresAt column.
 const CODE_TTL_MS = Number(CODE_TTL_SEC) * 1000;
-const codeStore = new Map(); // code -> { genesisId, expiresAt }
+const codeStore = new Map(); // code -> { customerId (Customer.id), expiresAt }
 
-function issueCode(genesisId) {
+function issueCode(customerId) {
   const code = crypto.randomBytes(32).toString('base64url');
-  codeStore.set(code, { genesisId, expiresAt: Date.now() + CODE_TTL_MS });
+  codeStore.set(code, { customerId, expiresAt: Date.now() + CODE_TTL_MS });
   return code;
 }
 
@@ -340,7 +355,7 @@ async function genesisAuth(req, res, next) {
       await prisma.customerIntegration.createMany({
         data: DEFAULT_INTEGRATIONS.map((i) => ({ customerId: customer.id, isConfigured: false, ...i })),
       });
-    } else if (!safeEqual(customer.genesisAuthToken, authToken)) {
+    } else if (!customer.genesisAuthToken || !safeEqual(customer.genesisAuthToken, authToken)) {
       return res.status(403).json({ error: 'Invalid Genesis Authentication' });
     }
 
@@ -370,12 +385,19 @@ if (!isProd || ENABLE_API_DOCS === 'true') {
   app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec, { swaggerOptions: { persistAuthorization: true } }));
 }
 
-// (1) Server-to-server: host backend sends the real token, receives a single-use code (~60s)
-app.post('/api/code', strictLimiter, genesisAuth, (req, res) => {
-  const code = issueCode(req.customer.genesisId);
+// (1) Server-to-server: host backend sends its credentials, receives a single-use code (~60s).
+// Both routes share this handler; only the auth middleware differs.
+function sendCode(req, res) {
+  const code = issueCode(req.customer.id);
   res.set('Cache-Control', 'no-store');
   res.json({ code, ttlSec: Number(CODE_TTL_SEC) });
-});
+}
+
+// Genesis: x-genesis-customer-id + x-genesis-auth-token
+app.post('/api/code', strictLimiter, genesisAuth, sendCode);
+
+// Food LogiQ: x-customer-id + x-username + x-password (see src/flq/auth.js)
+app.post('/api/flq/code', strictLimiter, createFlqAuth({ prisma, addMissingIntegrations, authUrl: FLQ_AUTH_URL }), sendCode);
 
 /* ------------ sales demo customer ------------ */
 const DEMO_LOGIN_CODE = DEMO_CODE === 'off' ? null : DEMO_CODE || 'demo';
@@ -410,6 +432,9 @@ async function getDemoCustomer(source) {
   return customer;
 }
 
+// Customer ids returned to the frontend: one of them is null (Genesis vs Food LogiQ customer)
+const sessionCustomer = (c) => ({ genesisId: c.genesisId, flqCustomerId: c.flqCustomerId });
+
 // Exchange code -> customer (shared by GET /?code= and POST /api/session/exchange)
 async function exchangeCode(code, source) {
   if (typeof code !== 'string' || !code) return null;
@@ -417,7 +442,7 @@ async function exchangeCode(code, source) {
   if (DEMO_LOGIN_CODE && safeEqual(code, DEMO_LOGIN_CODE)) return getDemoCustomer(source);
   const entry = consumeCode(code);
   if (!entry) return null;
-  return prisma.customer.findUnique({ where: { genesisId: entry.genesisId } });
+  return prisma.customer.findUnique({ where: { id: entry.customerId } });
 }
 
 // (2a) Iframe/web pointing directly at the API: GET /?code=... -> delete code, set cookie, redirect to FRONTEND_URL
@@ -458,7 +483,7 @@ app.post('/api/session/exchange', strictLimiter, async (req, res) => {
       tokenType: 'Bearer',
       expiresIn: SESSION_TTL_SEC,
       source,
-      customer: { genesisId: customer.genesisId },
+      customer: sessionCustomer(customer),
     });
   } catch (error) {
     console.error('code exchange error:', error);
@@ -468,7 +493,7 @@ app.post('/api/session/exchange', strictLimiter, async (req, res) => {
 
 // Current session
 app.get('/api/session', requireSession, (req, res) => {
-  res.json({ ok: true, source: req.source, customer: { genesisId: req.customer.genesisId } });
+  res.json({ ok: true, source: req.source, customer: sessionCustomer(req.customer) });
 });
 
 // Logout

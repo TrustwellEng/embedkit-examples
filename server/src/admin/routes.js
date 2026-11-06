@@ -293,11 +293,16 @@ export function createAdminRouter(deps) {
     return { enabled: map(enabled), configured: map(configured) };
   }
 
+  const customerLabel = (c) => c.genesisId ?? `FLQ ${c.flqCustomerId}`;
+
   const toCustomerDto = (c, counts, emails) => ({
     id: c.id,
     genesisId: c.genesisId,
+    // Food LogiQ customers (genesisId null): sign in with username + password; the hash never leaves the server
+    flqCustomerId: c.flqCustomerId,
+    flqUsername: c.flqUsername,
     customerName: c.customerName,
-    tokenPreview: String(c.genesisAuthToken).slice(-4), // the full token never leaves the server
+    tokenPreview: c.genesisAuthToken ? c.genesisAuthToken.slice(-4) : null, // the full token never leaves the server
     createdAt: c.createdAt,
     createdByEmail: emails[c.createdBy] ?? null,
     modifiedAt: c.modifiedAt,
@@ -313,7 +318,7 @@ export function createAdminRouter(deps) {
       const pageSize = Math.min(Math.max(Number(req.query.pageSize) || CUSTOMER_PAGE_SIZE, 1), CUSTOMER_PAGE_SIZE);
       const page = Math.max(Math.floor(Number(req.query.page)) || 1, 1);
       const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
-      const where = q ? { genesisId: { contains: q } } : {};
+      const where = q ? { OR: [{ genesisId: { contains: q } }, { flqCustomerId: { contains: q } }] } : {};
 
       const [total, customers] = await Promise.all([
         prisma.customer.count({ where }),
@@ -360,6 +365,7 @@ export function createAdminRouter(deps) {
     handle('Update token', async (req, res) => {
       const customer = await findCustomer(req, res);
       if (!customer) return;
+      if (!customer.genesisId) return res.status(400).json({ error: 'not_genesis_customer' });
       const token = typeof req.body?.token === 'string' ? req.body.token.trim() : '';
       if (!token || token.length > 255) return res.status(400).json({ error: 'invalid_token' });
 
@@ -437,7 +443,7 @@ export function createAdminRouter(deps) {
         update: { isEnabled, modifiedBy: by },
         create: { customerId: customer.id, integrationId, isEnabled, isConfigured: false, createdBy: by, modifiedBy: by },
       });
-      await audit(req, 'integration_toggled', { detail: `${customer.genesisId} / ${integrationId} → ${isEnabled ? 'on' : 'off'}` });
+      await audit(req, 'integration_toggled', { detail: `${customerLabel(customer)} / ${integrationId} → ${isEnabled ? 'on' : 'off'}` });
       res.json({ ok: true });
     })
   );

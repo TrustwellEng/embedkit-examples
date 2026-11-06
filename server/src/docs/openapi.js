@@ -58,9 +58,17 @@ export const openapiSpec = {
       cookieAuth: { type: 'apiKey', in: 'cookie', name: 'sid' },
       genesisCustomerId: { type: 'apiKey', in: 'header', name: 'x-genesis-customer-id' },
       genesisAuthToken: { type: 'apiKey', in: 'header', name: 'x-genesis-auth-token' },
+      flqCustomerId: { type: 'apiKey', in: 'header', name: 'x-customer-id', description: "Food LogiQ customer id (FLQ's cust_id)" },
+      flqUsername: { type: 'apiKey', in: 'header', name: 'x-username' },
+      flqPassword: { type: 'apiKey', in: 'header', name: 'x-password' },
       adminKey: { type: 'apiKey', in: 'header', name: 'x-admin-key', description: 'Value of ADMIN_API_KEY' },
     },
     schemas: {
+      // Genesis customers have genesisId, Food LogiQ customers have flqCustomerId; the other is null
+      SessionCustomer: {
+        type: 'object',
+        properties: { genesisId: { type: 'string', nullable: true }, flqCustomerId: { type: 'string', nullable: true } },
+      },
       Error: {
         type: 'object',
         required: ['error'],
@@ -174,6 +182,33 @@ export const openapiSpec = {
       },
     },
 
+    '/api/flq/code': {
+      post: {
+        tags: ['Auth'],
+        summary: 'Issue a one-time code for Food LogiQ (server-to-server)',
+        description:
+          'Same as `/api/code`, but for Food LogiQ: validates username (FoodLogiQ email) + password against the FoodLogiQ auth API ' +
+          '(`FLQ_AUTH_URL`); creates the customer (with default integrations) on first call. ' +
+          'Afterwards the customer id only accepts the username it was created with. ' +
+          'Open the iframe with `?source=FLQ`. Code is single-use and expires after `CODE_TTL_SEC` (default 60s). Rate limit: 20/min.',
+        security: [{ flqCustomerId: [], flqUsername: [], flqPassword: [] }],
+        responses: {
+          200: {
+            description: 'Code issued',
+            content: {
+              'application/json': {
+                schema: { type: 'object', properties: { code: { type: 'string' }, ttlSec: { type: 'integer', example: 60 } } },
+              },
+            },
+          },
+          400: error({ description: 'A header is missing or blank', error: 'Missing Credentials' }),
+          401: error({ description: 'Rejected by FoodLogiQ, or the customer id belongs to another username', error: 'Invalid Credentials' }),
+          429: rateLimited,
+          502: error({ description: 'FoodLogiQ unreachable', error: 'flq_unreachable' }),
+        },
+      },
+    },
+
     '/': {
       get: {
         tags: ['Auth'],
@@ -221,7 +256,7 @@ export const openapiSpec = {
                     tokenType: { type: 'string', example: 'Bearer' },
                     expiresIn: { type: 'integer', example: 7200 },
                     source: { type: 'string', enum: ['GF', 'FLQ'], example: 'GF' },
-                    customer: { type: 'object', properties: { genesisId: { type: 'string' } } },
+                    customer: { $ref: '#/components/schemas/SessionCustomer' },
                   },
                 },
               },
@@ -240,7 +275,7 @@ export const openapiSpec = {
         summary: 'Current session',
         security: [{ bearerAuth: [] }, { cookieAuth: [] }],
         responses: {
-          200: { description: 'Logged in', content: { 'application/json': { example: { ok: true, source: 'GF', customer: { genesisId: '12345' } } } } },
+          200: { description: 'Logged in', content: { 'application/json': { example: { ok: true, source: 'GF', customer: { genesisId: '12345', flqCustomerId: null } } } } },
           401: unauthorized,
         },
       },

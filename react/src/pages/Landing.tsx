@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Integration, IntegrationStatus, isStandard } from "../data/integrations";
-import { apiFetch, exchangeCode, exchangeCodeFromUrl } from "../service/session";
+import { apiFetch, exchangeCode, exchangeCodeFromUrl, getSource } from "../service/session";
 
 interface LandingProps {
   onSelectIntegration: (integration: Integration) => void;
@@ -10,6 +10,35 @@ const base = import.meta.env.VITE_SERVER_URL as string;
 const IS_DEV = import.meta.env.DEV;
 
 type Status = "loading" | "ready" | "unauthorized" | "error";
+
+// Dev login form per host app (?source=): fields become the request headers of that app's code endpoint
+type DevLoginField = { header: string; label: string; secret?: boolean };
+const DEV_LOGIN = {
+  GF: {
+    title: "Genesis Authentication (dev only)",
+    hostName: "Genesis",
+    endpoint: "/api/code",
+    fields: [
+      { header: "x-genesis-customer-id", label: "GENESIS ID" },
+      { header: "x-genesis-auth-token", label: "API TOKEN", secret: true },
+    ] as DevLoginField[],
+    errors: { 403: "Invalid Genesis ID or token.", 502: "Unable to reach Genesis to validate the token." } as Record<number, string>,
+  },
+  FLQ: {
+    title: "Food LogiQ Authentication (dev only)",
+    hostName: "Food LogiQ",
+    endpoint: "/api/flq/code",
+    fields: [
+      { header: "x-customer-id", label: "CUSTOMER ID" },
+      { header: "x-username", label: "USERNAME" },
+      { header: "x-password", label: "PASSWORD", secret: true },
+    ] as DevLoginField[],
+    errors: {
+      401: "Invalid username or password, or this customer ID belongs to another user.",
+      502: "Unable to reach FoodLogiQ to validate the credentials.",
+    } as Record<number, string>,
+  },
+};
 
 // Display order: connected -> not connected -> disabled -> coming soon. Ties keep the server order.
 const STATUS_RANK: Record<IntegrationStatus, number> = {
@@ -30,9 +59,9 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
   const [status, setStatus] = useState<Status>("loading");
   const [error, setError] = useState<string | null>(null);
 
-  // Local dev only (when there is no Genesis host to embed the iframe)
-  const [inputGenesisId, setInputGenesisId] = useState("");
-  const [inputApiToken, setInputApiToken] = useState("");
+  // Local dev only (when there is no Genesis / Food LogiQ host to embed the iframe)
+  const devLogin = DEV_LOGIN[getSource()];
+  const [devInputs, setDevInputs] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
 
@@ -63,29 +92,21 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
     return () => controller.abort();
   }, []);
 
-  // DEV ONLY: simulate the Genesis backend requesting a code, then exchange it like the iframe would
+  // DEV ONLY: simulate the host backend (Genesis or Food LogiQ) requesting a code, then exchange it like the iframe would
   const handleDevLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputGenesisId.trim() || !inputApiToken.trim()) return;
+    // Passwords are sent as typed; ids and tokens are trimmed
+    const headers: Record<string, string> = {};
+    for (const f of devLogin.fields) {
+      const value = devInputs[f.header] ?? "";
+      headers[f.header] = f.header === "x-password" ? value : value.trim();
+    }
+    if (Object.values(headers).some((v) => !v)) return;
     setSubmitting(true);
     setLoginError(null);
     try {
-      const res = await fetch(`${base}/api/code`, {
-        method: "POST",
-        headers: {
-          "x-genesis-customer-id": inputGenesisId.trim(),
-          "x-genesis-auth-token": inputApiToken.trim(),
-        },
-      });
-      if (!res.ok) {
-        throw new Error(
-          res.status === 403
-            ? "Invalid Genesis ID or token."
-            : res.status === 502
-              ? "Unable to reach Genesis to validate the token."
-              : "Login failed."
-        );
-      }
+      const res = await fetch(`${base}${devLogin.endpoint}`, { method: "POST", headers });
+      if (!res.ok) throw new Error(devLogin.errors[res.status] ?? "Login failed.");
       const { code } = await res.json();
       await exchangeCode(code);
       setSubmitting(false);
@@ -122,32 +143,27 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
         <div className="max-w-2xl w-full">
           <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-8">
             <div className="border-b border-gray-200 pb-6 mb-6">
-              <h1 className="text-xl font-bold text-gray-950 mb-1">Genesis Authentication (dev only)</h1>
+              <h1 className="text-xl font-bold text-gray-950 mb-1">{devLogin.title}</h1>
               <p className="text-sm text-gray-500">
-                In production, Genesis opens this page with a one-time code. This form only simulates that.
+                In production, {devLogin.hostName} opens this page with a one-time code. This form only simulates that.
               </p>
             </div>
             <form onSubmit={handleDevLogin} className="space-y-6">
-              <div className="flex flex-col">
-                <label className="block text-[14px] font-semibold text-black mb-1">GENESIS ID</label>
-                <input
-                  type="text"
-                  value={inputGenesisId}
-                  onChange={(e) => setInputGenesisId(e.target.value)}
-                  className={inputClass}
-                  required
-                />
-              </div>
-              <div className="flex flex-col">
-                <label className="block text-[14px] font-semibold text-black mb-1">API TOKEN</label>
-                <input
-                  type="password"
-                  value={inputApiToken}
-                  onChange={(e) => setInputApiToken(e.target.value)}
-                  className={`${inputClass} font-mono`}
-                  required
-                />
-              </div>
+              {devLogin.fields.map((f) => (
+                <div key={f.header} className="flex flex-col">
+                  <label htmlFor={f.header} className="block text-[14px] font-semibold text-black mb-1">
+                    {f.label}
+                  </label>
+                  <input
+                    id={f.header}
+                    type={f.secret ? "password" : "text"}
+                    value={devInputs[f.header] ?? ""}
+                    onChange={(e) => setDevInputs((prev) => ({ ...prev, [f.header]: e.target.value }))}
+                    className={f.secret ? `${inputClass} font-mono` : inputClass}
+                    required
+                  />
+                </div>
+              ))}
               {loginError && <p className="text-sm text-red-500">{loginError}</p>}
               <div className="pt-6 flex items-center justify-end space-x-4 border-t border-gray-200 mt-2">
                 <button

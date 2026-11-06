@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { Customer, customersApi, PRODUCTS } from "../api";
+import { Customer, customerLabel, customersApi, PRODUCTS } from "../api";
 import {
   Badge,
   Card,
@@ -105,24 +105,37 @@ export const CustomerDetailPage: React.FC = () => {
       <Link to={(location.state as { back?: string } | null)?.back ?? "/admin/customers"} className="inline-block text-[13px] font-medium text-gray-700 hover:text-[#4338CA] mb-4">
         ← Customers
       </Link>
-      <PageHeader title={`Customer ${c.genesisId}`} description={`Created ${formatDate(c.createdAt)}`} />
+      <PageHeader title={`Customer ${customerLabel(c)}`} description={`Created ${formatDate(c.createdAt)}`} />
 
-      <Card className="p-5 mb-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 className="text-[15px] font-bold text-gray-950 mb-2">Auth token</h2>
-            <div className="flex flex-wrap items-center gap-3 text-[14px] text-gray-700">
-              <span className="font-mono text-[13px]">••••••••{c.tokenPreview}</span>
-              <span className="text-gray-500">
-                Last changed {formatDate(c.modifiedAt ?? c.createdAt)} {c.modifiedByEmail ? `by ${c.modifiedByEmail}` : "by system"}
-              </span>
-            </div>
+      {!c.genesisId ? (
+        // Food LogiQ customer: signs in with username + password (POST /api/flq/code), checked with FoodLogiQ
+        <Card className="p-5 mb-6">
+          <h2 className="text-[15px] font-bold text-gray-950 mb-2">Food LogiQ sign-in</h2>
+          <div className="flex flex-wrap items-center gap-3 text-[14px] text-gray-700">
+            <span>
+              Username <span className="font-mono text-[13px]">{c.flqUsername}</span>
+            </span>
+            <span className="text-gray-500">The password is checked with FoodLogiQ at every sign-in.</span>
           </div>
-          <button type="button" onClick={() => setEditingToken(true)} className={primaryButtonClass}>
-            Update token
-          </button>
-        </div>
-      </Card>
+        </Card>
+      ) : (
+        <Card className="p-5 mb-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-[15px] font-bold text-gray-950 mb-2">Auth token</h2>
+              <div className="flex flex-wrap items-center gap-3 text-[14px] text-gray-700">
+                <span className="font-mono text-[13px]">••••••••{c.tokenPreview}</span>
+                <span className="text-gray-500">
+                  Last changed {formatDate(c.modifiedAt ?? c.createdAt)} {c.modifiedByEmail ? `by ${c.modifiedByEmail}` : "by system"}
+                </span>
+              </div>
+            </div>
+            <button type="button" onClick={() => setEditingToken(true)} className={primaryButtonClass}>
+              Update token
+            </button>
+          </div>
+        </Card>
+      )}
 
       <Card>
         <div className="px-4 py-4 border-b border-gray-200">
@@ -162,7 +175,7 @@ export const CustomerDetailPage: React.FC = () => {
                   <ChangedBy at={r.modifiedAt} by={r.modifiedByEmail} />
                 </Td>
                 <Td>
-                  <Toggle checked={r.isEnabled} onChange={(v) => toggle(r.integrationId, v)} label={`Enable ${r.name} for ${c.genesisId}`} />
+                  <Toggle checked={r.isEnabled} onChange={(v) => toggle(r.integrationId, v)} label={`Enable ${r.name} for ${customerLabel(c)}`} />
                 </Td>
               </tr>
             ))}
