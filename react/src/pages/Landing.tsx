@@ -292,7 +292,7 @@ const CardBody: React.FC<{ item: Integration; className: string; children?: Reac
 
 // Standard:  connected -> Connected; not connected -> Available (opens the wizard)
 // Premium:   connected -> Connected; not connected -> Licensed + Set up (wizard)
-// Both:      disabled (not enabled for the customer) -> Not licensed + Request (contact page)
+// Both:      disabled (not enabled for the customer) -> Get Add-on + Request (contact page)
 // Coming soon: "Coming soon" ribbon, not clickable
 const IntegrationCard: React.FC<{ item: Integration; onSelect: () => void }> = ({ item, onSelect }) => {
   const { status } = item;
@@ -344,12 +344,12 @@ const IntegrationCard: React.FC<{ item: Integration; onSelect: () => void }> = (
             <rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor" />
             <path d="M5.5 7V5a2.5 2.5 0 015 0v2" fill="none" stroke="currentColor" strokeWidth="1.6" />
           </svg>
-          Not licensed
+          Get Add-on
         </span>
         <CardAction label="Request" />
       </>
     );
-    statusLabel = "not licensed, request access";
+    statusLabel = "get add-on, request access";
   }
 
   const body = (
