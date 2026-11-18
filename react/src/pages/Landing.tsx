@@ -202,7 +202,6 @@ export const Landing: React.FC<LandingProps> = ({ onSelectIntegration }) => {
   return (
     <div className="min-h-screen bg-white py-8 px-8">
       <div className="max-w-[1200px] mx-auto">
-        <h1 className="text-xl font-bold text-black mb-6">Integrations</h1>
 
         {standard.length > 0 && (
           <IntegrationGroup
