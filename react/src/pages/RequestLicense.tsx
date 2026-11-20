@@ -7,8 +7,7 @@ interface RequestLicenseProps {
   onBack: () => void;
 }
 
-// Booking link for the account manager call (e.g. a Calendly/HubSpot meetings URL)
-const SCHEDULE_CALL_URL = import.meta.env.VITE_SCHEDULE_CALL_URL as string | undefined;
+const CONTACT_SALES_URL = "mailto:sales@trustwell.com";
 
 const iconProps = {
   viewBox: "0 0 24 24",
@@ -42,10 +41,10 @@ const PeopleIcon = () => (
   </svg>
 );
 
-const CalendarIcon = () => (
+const MailIcon = () => (
   <svg {...iconProps}>
-    <rect x="4" y="5" width="16" height="15" rx="2" />
-    <path d="M8 3v4M16 3v4M4 10h16" />
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="M3 7l9 6 9-6" />
   </svg>
 );
 
@@ -104,15 +103,9 @@ export const RequestLicense: React.FC<RequestLicenseProps> = ({ integration, onB
             </p>
           </div>
 
-          <a
-            href={SCHEDULE_CALL_URL || "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => !SCHEDULE_CALL_URL && e.preventDefault()}
-            className={`${primaryButtonClass} inline-flex items-center gap-2`}
-          >
-            <CalendarIcon />
-            Schedule a call with your account manager
+          <a href={CONTACT_SALES_URL} className={`${primaryButtonClass} inline-flex items-center gap-2`}>
+            <MailIcon />
+            Contact Sales
           </a>
           <p className="text-[13px] text-gray-600 mt-3 mb-6">
             Already purchased? Contact your account manager to confirm access.
